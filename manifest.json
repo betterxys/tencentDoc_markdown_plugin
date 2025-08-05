@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "腾讯文档 Markdown 查看器",
+  "version": "1.0",
+  "description": "在腾讯文档中查看单元格内容的 Markdown 渲染",
+  "permissions": ["storage", "scripting", "sidePanel", "tabs"],
+  "host_permissions": ["*://doc.weixin.qq.com/sheet*"],
+  "action": {
+    "default_title": "腾讯文档 Markdown 查看器",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://doc.weixin.qq.com/sheet*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "打开 Markdown 查看器侧边栏"
+    }
+  },
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  }
+} 

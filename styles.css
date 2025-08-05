@@ -1,0 +1,12 @@
+/* 
+ * 腾讯文档 Markdown 查看器的内容脚本样式
+ * 这个文件会被注入到腾讯文档页面中
+ */
+
+/* 为被点击的单元格添加一个微妙的高亮效果 */
+.md-viewer-active-cell {
+  outline: 2px solid rgba(66, 133, 244, 0.3) !important;
+  outline-offset: -2px;
+}
+
+/* 如有需要，可在此处添加其他样式 */ 
