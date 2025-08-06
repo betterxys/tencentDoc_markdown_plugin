@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>最终诊断：为什么Markdown渲染失败</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .success { border-left-color: green; background: #f0fff0; }
+        .error { border-left-color: red; background: #fff0f0; }
+        .warning { border-left-color: orange; background: #fff8e7; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; font-size: 12px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 最终诊断：Markdown渲染失败的真正原因</h1>
+    
+    <div class="comparison">
+        <div>
+            <h2>❌ 失败的内容（用户提供）</h2>
+            <pre id="failing-content">加载中...</pre>
+        </div>
+        <div>
+            <h2>✅ 修复后的内容</h2>
+            <pre id="fixed-content">加载中...</pre>
+        </div>
+    </div>
+    
+    <button onclick="diagnoseIssue()">开始诊断</button>
+    <button onclick="testFix()">测试修复</button>
+    
+    <div id="diagnosis-result" class="result"></div>
+    
+    <h2>渲染对比</h2>
+    <div class="comparison">
+        <div>
+            <h3>原始内容渲染结果</h3>
+            <div id="original-render" style="border: 1px solid #ccc; padding: 10px; min-height: 100px;"></div>
+        </div>
+        <div>
+            <h3>修复后渲染结果</h3>
+            <div id="fixed-render" style="border: 1px solid #ccc; padding: 10px; min-height: 100px;"></div>
+        </div>
+    </div>
+    
+    <div id="final-conclusion" class="result"></div>
+    
+    <script src="lib/markdown-it.min.js"></script>
+    
+    <script>
+        // 用户的失败内容
+        const failingContent = `### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+
+|----------|------------------|-------------------|-------------|
+
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+这是保险+科技+服务的模式。`;
+
+        // 显示内容
+        document.getElementById('failing-content').textContent = failingContent;
+        
+        function diagnoseIssue() {
+            const result = document.getElementById('diagnosis-result');
+            
+            // 分析内容特征
+            const lines = failingContent.split('\\n');
+            const tableLines = lines.filter(line => line.includes('|'));
+            const emptyLines = lines.filter(line => line.trim() === '');
+            const hasTableGaps = /\\|\\n\\s*\\n\\|/.test(failingContent);
+            
+            let diagnosis = '<h3>🔍 问题诊断结果</h3>';
+            diagnosis += `<div><strong>总行数:</strong> ${lines.length}</div>`;
+            diagnosis += `<div><strong>表格行数:</strong> ${tableLines.length}</div>`;
+            diagnosis += `<div><strong>空行数:</strong> ${emptyLines.length}</div>`;
+            diagnosis += `<div><strong>表格行间有空行:</strong> ${hasTableGaps ? '❌ 是' : '✅ 否'}</div>`;
+            
+            // 检查分隔符行
+            const separatorLine = tableLines.find(line => /^\\s*\\|[\\s\\-:]*\\|\\s*$/.test(line));
+            diagnosis += `<div><strong>有分隔符行:</strong> ${separatorLine ? '✅ 是' : '❌ 否'}</div>`;
+            
+            if (separatorLine) {
+                diagnosis += `<div><strong>分隔符内容:</strong> <code>${separatorLine}</code></div>`;
+            }
+            
+            // 关键问题识别
+            diagnosis += '<br><h4>🎯 关键问题:</h4>';
+            if (hasTableGaps) {
+                diagnosis += '<div class="error">❌ <strong>主要问题:</strong> 表格行之间的空行破坏了Markdown表格的连续性</div>';
+                diagnosis += '<div>📋 Markdown表格要求所有表格行必须连续，不能有空行分隔</div>';
+            }
+            if (!separatorLine) {
+                diagnosis += '<div class="error">❌ <strong>次要问题:</strong> 可能缺少有效的分隔符行</div>';
+            }
+            
+            result.innerHTML = diagnosis;
+            result.className = hasTableGaps ? 'result error' : 'result warning';
+        }
+        
+        function testFix() {
+            if (typeof markdownit === 'undefined') {
+                document.getElementById('fixed-render').innerHTML = '<p style="color: red;">markdown-it 未加载</p>';
+                return;
+            }
+            
+            const md = markdownit({
+                html: false,
+                breaks: false,
+                linkify: true,
+                typographer: true
+            });
+            
+            // 测试原始内容
+            console.log('测试原始内容渲染...');
+            const originalHtml = md.render(failingContent);
+            const originalHasTable = /<table/.test(originalHtml);
+            
+            document.getElementById('original-render').innerHTML = originalHtml;
+            
+            // 修复内容（移除表格行间空行）
+            const fixedContent = failingContent.replace(/(\\|.*\\|)\\n\\s*\\n(?=\\|)/g, '$1\\n');
+            document.getElementById('fixed-content').textContent = fixedContent;
+            
+            console.log('测试修复后内容渲染...');
+            const fixedHtml = md.render(fixedContent);
+            const fixedHasTable = /<table/.test(fixedHtml);
+            
+            document.getElementById('fixed-render').innerHTML = fixedHtml;
+            
+            // 显示最终结论
+            const conclusion = document.getElementById('final-conclusion');
+            let conclusionText = '<h3>🎯 最终结论</h3>';
+            
+            conclusionText += `<div><strong>原始内容生成表格:</strong> ${originalHasTable ? '✅ 是' : '❌ 否'}</div>`;
+            conclusionText += `<div><strong>修复后生成表格:</strong> ${fixedHasTable ? '✅ 是' : '❌ 否'}</div>`;
+            
+            if (!originalHasTable && fixedHasTable) {
+                conclusionText += '<div class="success"><h4>🎉 问题确认解决！</h4>';
+                conclusionText += '<div><strong>根本原因:</strong> 表格行之间的空行导致markdown-it无法识别完整的表格结构</div>';
+                conclusionText += '<div><strong>解决方案:</strong> 使用正则表达式 <code>/(\\\\|.*\\\\|)\\\\n\\\\s*\\\\n(?=\\\\|)/g</code> 移除表格行间的空行</div>';
+                conclusionText += '<div><strong>应用位置:</strong> 在content.js的 <code>cleanTextContent()</code> 函数中已经集成此修复</div>';
+                conclusionText += '</div>';
+                conclusion.className = 'result success';
+            } else if (!originalHasTable && !fixedHasTable) {
+                conclusionText += '<div class="error"><h4>❌ 问题仍未解决</h4>';
+                conclusionText += '<div>可能需要更深入的修复，或者存在其他格式问题</div>';
+                conclusionText += '</div>';
+                conclusion.className = 'result error';
+            } else if (originalHasTable) {
+                conclusionText += '<div class="warning"><h4>⚠️ 原始内容已经可以渲染</h4>';
+                conclusionText += '<div>这表明问题可能在特定环境或更复杂的内容中</div>';
+                conclusionText += '</div>';
+                conclusion.className = 'result warning';
+            }
+            
+            conclusionText += '<br><h4>📋 行动建议:</h4>';
+            conclusionText += '<div>1. ✅ 确保插件中的 <code>cleanTextContent()</code> 函数正常工作</div>';
+            conclusionText += '<div>2. ✅ 验证增强提取策略是否被正确应用</div>';
+            conclusionText += '<div>3. ✅ 在腾讯文档中实际测试修复效果</div>';
+            conclusionText += '<div>4. ✅ 检查侧边栏的markdown-it配置是否正确</div>';
+            
+            conclusion.innerHTML = conclusionText;
+        }
+        
+        // 页面加载后自动运行诊断
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                diagnoseIssue();
+                setTimeout(() => {
+                    testFix();
+                }, 1000);
+            }, 500);
+        });
+    </script>
+</body>
+</html>

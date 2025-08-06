@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试表格修复</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .error { border-left-color: red; }
+        .success { border-left-color: green; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>测试表格预处理修复</h1>
+    
+    <div class="test-section">
+        <h2>原始问题表格内容</h2>
+        <pre id="original-content"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>预处理测试</h2>
+        <button onclick="testPreprocessing()">测试表格预处理</button>
+        <div id="preprocessing-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>markdown-it 渲染测试</h2>
+        <button onclick="testRendering()">测试渲染</button>
+        <div id="rendering-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>最终渲染效果</h2>
+        <div id="final-result"></div>
+    </div>
+
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+
+    <script>
+        // 用户提供的失败表格内容
+        const failingContent = `---
+
+
+
+
+### **预算参考**
+
+| 项目       | 费用（2人）       | 说明                     |
+
+|------------|------------------|--------------------------|
+
+| 充电+电费  | ¥600             | 按2200km×0.25元/km估算  |
+
+| 高速过路费 | ¥1100            | 单程约¥545[citation:3]   |
+
+| 住宿       | ¥3500-¥5000      | 7晚中高档酒店            |
+
+| 餐饮       | ¥2000            | 日均¥250（含特色餐）     |
+
+| 景点门票   | ¥800             | 岳阳楼¥70+君山船票¥80等 |
+
+
+
+
+---`;
+
+        // 显示原始内容
+        document.getElementById('original-content').textContent = failingContent;
+
+        // 复制插件的预处理函数
+        function preprocessTableContent(content) {
+            try {
+                const lines = content.split('\n');
+                const processedLines = [];
+                let inTable = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const isTableLine = /^\s*\|.*\|\s*$/.test(line);
+                    
+                    if (isTableLine) {
+                        inTable = true;
+                        processedLines.push(line);
+                    } else if (inTable && line.trim() === '') {
+                        // 在表格中遇到空行，跳过不添加
+                        continue;
+                    } else if (inTable && !isTableLine) {
+                        // 表格结束
+                        inTable = false;
+                        processedLines.push(line);
+                    } else {
+                        // 非表格内容，正常添加
+                        processedLines.push(line);
+                    }
+                }
+                
+                const result = processedLines.join('\n');
+                console.log(`表格预处理：${lines.length}行 → ${processedLines.length}行`);
+                return result;
+                
+            } catch (error) {
+                console.error(`表格预处理失败: ${error.message}`);
+                return content; // 失败时返回原内容
+            }
+        }
+
+        function testPreprocessing() {
+            const result = document.getElementById('preprocessing-result');
+            
+            console.log('=== 预处理测试 ===');
+            const preprocessed = preprocessTableContent(failingContent);
+            
+            console.log('原始内容行数:', failingContent.split('\n').length);
+            console.log('处理后行数:', preprocessed.split('\n').length);
+            
+            result.innerHTML = `
+                <strong>预处理结果:</strong><br>
+                原始行数: ${failingContent.split('\n').length}<br>
+                处理后行数: ${preprocessed.split('\n').length}<br>
+                <br>
+                <strong>处理后的内容:</strong><br>
+                <pre>${preprocessed}</pre>
+            `;
+            result.className = 'result success';
+        }
+
+        function testRendering() {
+            const result = document.getElementById('rendering-result');
+            const finalResult = document.getElementById('final-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span style="color: red;">❌ markdown-it 不可用</span>';
+                    result.className = 'result error';
+                    return;
+                }
+                
+                const md = markdownit({ 
+                    html: false, 
+                    breaks: false, 
+                    linkify: true,
+                    typographer: true
+                });
+                
+                // 测试原始内容
+                const originalRendered = md.render(failingContent);
+                const originalHasTable = /<table/.test(originalRendered);
+                
+                // 测试预处理后的内容
+                const preprocessed = preprocessTableContent(failingContent);
+                const preprocessedRendered = md.render(preprocessed);
+                const preprocessedHasTable = /<table/.test(preprocessedRendered);
+                
+                console.log('原始渲染结果包含table:', originalHasTable);
+                console.log('预处理后渲染结果包含table:', preprocessedHasTable);
+                
+                result.innerHTML = `
+                    <strong>渲染测试结果:</strong><br>
+                    原始内容渲染包含table标签: ${originalHasTable ? '✅' : '❌'}<br>
+                    预处理后渲染包含table标签: ${preprocessedHasTable ? '✅' : '❌'}<br>
+                    <br>
+                    <strong>修复状态:</strong> ${preprocessedHasTable ? '✅ 修复成功!' : '❌ 仍有问题'}
+                `;
+                
+                result.className = preprocessedHasTable ? 'result success' : 'result error';
+                
+                // 显示最终渲染效果
+                if (preprocessedHasTable) {
+                    finalResult.innerHTML = `
+                        <h3>✅ 修复后的渲染效果:</h3>
+                        ${preprocessedRendered}
+                    `;
+                } else {
+                    finalResult.innerHTML = `
+                        <h3>❌ 渲染仍然失败</h3>
+                        <p>生成的HTML:</p>
+                        <pre>${preprocessedRendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    `;
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 渲染错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('load', function() {
+            testPreprocessing();
+            setTimeout(() => {
+                testRendering();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

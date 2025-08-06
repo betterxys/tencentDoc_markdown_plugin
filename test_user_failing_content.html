@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试用户提供的失败Markdown内容</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .success { border-left-color: green; background: #f0fff0; }
+        .error { border-left-color: red; background: #fff0f0; }
+        .warning { border-left-color: orange; background: #fff8e7; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; font-size: 12px; max-height: 150px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .analysis { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; }
+        .char-analysis { font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>用户失败内容诊断</h1>
+    
+    <div class="analysis">
+        <strong>问题：</strong>用户从腾讯文档提取的Markdown文本渲染完全失效<br>
+        <strong>症状：</strong>包含表格、标题、粗体等Markdown语法，但不能正确渲染<br>
+        <strong>目标：</strong>诊断根本原因并验证修复方案
+    </div>
+    
+    <div class="test-section">
+        <h2>1. 内容特征分析</h2>
+        <button onclick="analyzeUserContent()">分析内容</button>
+        <div id="content-analysis" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 字符级别检查</h2>
+        <button onclick="checkCharacterLevel()">字符检查</button>
+        <div id="char-analysis" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 表格结构验证</h2>
+        <button onclick="validateTableStructure()">验证表格</button>
+        <div id="table-validation" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. Markdown渲染测试</h2>
+        <button onclick="testMarkdownParsing()">测试渲染</button>
+        <div id="parsing-test" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>5. 修复后的渲染效果</h2>
+        <div id="fixed-render" style="border: 1px solid #ccc; padding: 15px; margin: 10px 0; min-height: 100px;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>6. 解决方案建议</h2>
+        <div id="solution" class="result"></div>
+    </div>
+    
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <script src="enhanced_extraction_strategy.js"></script>
+    
+    <script>
+        // 用户提供的真实失败内容（截取关键部分）
+        const userFailingContent = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断；工艺参数泄露引发安全事故；环保数据篡改招致监管罚款 | 覆盖停产损失（日均产值×停机天数）+ 数据恢复费用 + 第三方责任赔偿（如环境污染） | 《工业控制系统信息安全防护指南》[citation:7]；《网络安全法》[citation:7] |
+| **电力行业** | 电网监控系统被入侵引发大面积停电；新能源电站遭DDoS攻击致脱网；用户数据泄露面临能监罚款 | 赔偿电网瘫痪罚款（单次最高500万） + 发电损失（按上网电价计算） + 合规罚金 | 《电力可靠性管理办法》要求强化监控系统防护[citation:9] |
+
+这是保险+科技+服务的模式。`;
+
+        // 完整的失败内容（用户的长文本）
+        const fullUserContent = `原始数据：
+思考过程：
+嗯，用户要求我以专业博主身份分析百度搜索"隆胸修复榜单前五排名更新，每家技术各有千秋!等不惧挑剔"的结果，提取关键词和长尾词，然后基于这些写一篇文章。
+
+首先需要分析用户提供的搜索结果，提取关键词和长尾词。在这些搜索结果中可以看到多个关于2025年隆胸修复医院的榜单信息，包括广州、上海、北京、杭州等地的医院排名[citation:1][citation:2][citation:4][citation:6][citation:9][citation:10][citation:11]。这些文章都提到了"隆胸修复"、"医院排名"、"技术特色"等关键词。
+
+从这些内容中，我可以提取出5个长尾关键词：
+〖2025隆胸修复医院TOP5技术解析〗 - 这个结合了时效性和技术分析
+〖北京八大处假体取出价格表〗 - 具体到某家医院和价格信息
+〖隆胸失败修复真实案例对比〗 - 满足用户想看实际效果的需求
+〖三甲医院隆胸修复红黑榜〗 - 有权威性和警示作用
+〖私立机构包膜挛缩修复指南〗 - 针对特定技术问题
+
+其中选择〖隆胸失败修复真实案例对比〗作为最容易让新站排名的长尾词，因为案例内容是用户决策的关键参考，且具有较高转化率。
+
+接下来需要设计一个新标题。按照用户的要求，标题需要包含核心词"隆胸修复榜单前五排名更新，每家技术各有千秋!等不惧挑剔"，采用问题+方案结构，长度控制在移动端26字以内。设计为：『隆胸修复医院哪家强？2025TOP5技术对比+真实案例解析』
+
+现在开始撰写文章正文。根据规则，文章开头要用【文章开始】独占一行。考虑设计以下结构：
+
+开篇用数据揭示问题严重性：引用消协报告中关于私立医院投诉量激增的数据
+提出核心问题并给出"三招验真"的解决方案
+
+制作TOP5医院对比表格：包含医院名称、技术招牌、价格区间、失败率等关键指标
+添加"血泪教训"案例增强说服力
+
+三招锁定真实案例：动态视频要素、资质核验方法、面诊必问问题
+
+私立vs公立修复率对比：用统计数据揭示风险差异
+
+独家维权指南：证据保存方法和合同条款建议
+
+结尾添加【文章结束】标记
+
+文章会融入个人观点，比如强调"初胸选公立，修复更要选公立"的理念，同时加入真实数据支持观点，如私立机构修复率比公立高40%等统计。每个知识点之间会用分隔线隔开，重点内容加粗突出。
+
+所有内容都基于搜索结果中的真实信息，确保专业性和可信度。
+思考过程结束
+
+### 关键词与长尾词分析  
+基于百度搜索"隆胸修复榜单前五排名更新，每家技术各有千秋!等不惧挑剔"的结果，结合2025年算法对权威性、技术差异及用户决策需求，提取以下5个高潜力长尾词：  
+1. 〖2025隆胸修复医院TOP5技术解析〗  
+2. 〖北京八大处假体取出价格表〗  
+3. 〖隆胸失败修复真实案例对比〗  
+4. 〖三甲医院隆胸修复红黑榜〗  
+5. 〖私立机构包膜挛缩修复指南〗  
+
+其中，**「隆胸失败修复真实案例对比」** 更易让新站快速排名：  
+- **用户决策刚需**：真实案例直击效果焦虑，是选择医院的核心依据；  
+- **内容稀缺性**：私立机构精修案例泛滥，无滤镜三甲真实解析不足15%；  
+- **信任背书强**：卫健委认证案例+术后追踪数据，符合百度EEAT原则[citation:1][citation:6]。  
+【分析完毕】  
+
+---
+
+### 新标题设计  
+『隆胸修复医院哪家强？2025TOP5技术对比+真实案例解析』  
+（符合规则：疑问式开头/核心词前10字内/移动端20字/含时效词"2025"+数据背书"TOP5"）  
+
+---
+
+### 文章正文  
+【文章开始】  
+
+**为什么68%的人因"精修案例"多花8万修复？**  
+2025年消协报告显示：**私立机构盗用三甲案例的投诉量激增58%**！三大典型套路曝光[citation:6][citation:9]：  
+❌ **"0疤痕"造假**：滤镜掩盖术后增生疤痕，实际触感凹凸不平；  
+❌ **影子医生操作**：宣传"院长主刀"，实为无证助理练手（卫健委查无记录）；  
+❌ **低价埋雷**：3万套餐术中加收"生物膜费""内窥镜使用费"2万+。  
+
+> **自问自答**：如何快速识破虚假案例库？  
+> → **三招验真**：  
+> 1. **索要躺卧/侧身动态视频**（观察假体边缘自然度）；  
+> 2. **核对卫健委官网手术备案编码**（无编码案例直接拉黑）；  
+> 3. **原图放大腋下切口**（锯齿状疤痕＞0.1mm即技术缺陷）。  
+
+---
+
+**2025隆胸修复TOP5医院硬核对比**  
+基于12万+真实评价与卫健委数据，严选名单及避坑点（价格单位：万元）[citation:1][citation:6][citation:9]：  
+
+| **医院**               | **技术招牌**                  | **均价** | **失败率** | **案例真实性** |  
+|------------------------|-------------------------------|----------|------------|----------------|  
+| **广东省人民医院**     | 血管化包膜剥离术              | 4-6      | 3.8%       | ✅ 卫健委认证   |  
+| **上海长征医院**       | 4D内窥镜假体重置              | 5-8      | 5.2%       | ✅ 动态视频库   |  
+| **北京美莱医疗**       | AI模拟脂肪存活率              | 6-9      | 7.1%       | ⚠️ 部分精修    |  
+| **杭州格莱美**         | 月光真空清创技术              | 3.5-6    | 6.5%       | ❌ 盗用率高    |  
+| **重庆华美**           | 山城分层修复技术              | 4.5-7    | 8.9%       | ✅ 原图直出    |  
+
+**血泪教训**：某机构用网红精修图承诺"自然胸型"，术后假体移位需二次开刀！签约必注 **"主刀全程操作+费用全包"**。  
+
+---
+
+**三招锁定真实修复案例（防造假！）**  
+1. **动态视频四要素**  
+   ✅ **自然光线拍摄**：拒绝打光修饰色沉；  
+   ✅ **术后6个月追踪**：观察疤痕软化程度；  
+   ❌ 拒收单一角度静态图（精修失真率超70%）。  
+
+2. **资质双重核验**  
+   - 卫健委查 **《胸部整形专项备案》**（非普通美容资质）[citation:9]；  
+   - 假体厂商授权书（如曼托官网可验主刀资格）。  
+
+3. **面诊必问三句话**  
+   - **"能看同方案修复用户1年反馈吗？"**（短期案例无参考价值）；  
+   - **"修复押金退还条件？"**（合同写"非人为问题全退"）；  
+   - **"生物膜费用是否包含？"**（书面确认防术中加价）。  
+
+---
+
+**独家数据：私立vs公立修复率真相**  
+2025整形协会统计：**私立机构隆胸修复率比公立高40%**！主因[citation:4][citation:6]：  
+- **假体移位**（过度追求"巨乳"占纠纷51%）；  
+- **包膜挛缩**（7成因助理操作不当致组织硬化）。  
+**维权成功率仅28%**——胜诉者均保存：  
+1. 医生签字 **《神经保护承诺书》**；  
+2. 假体包装扫码验伪时间戳；  
+3. 平台咨询页区块链存证编码。  
+
+---
+
+**2025避坑终极指南**  
+- **选院铁律**：  
+  🔥 **初修复选公立**：广东省人民医院 **血管化包膜剥离术**（挛缩复发率＜3%）；  
+  ⚠️ **拒低价套餐**：北京美莱 **AI脂肪存活率模拟**仅58%需二次填充。  
+- **合同追加条款**：  
+  **"主刀医生全程操作，违者赔三倍定金"**（维权胜率提至65%）；  
+  **"假体/仪器费用全包"**（防术中加价1.5万+）。  
+
+> **个人观点**：**失败修复更要选公立！** 私立"7天恢复"是噱头，上海长征医院的 **4D内窥镜技术** 才是真·毫米级精准复位。  
+
+---
+
+**维权必存三大铁证**  
+- **术中记录片段**（即使马赛克也有效）；  
+- **缴费发票+假体溯源码**（官网验货时间戳）；  
+- **医生口头承诺录音**（防术后推责）。  
+**法律警示**：合同未注明 **"主刀全程操作"** 的维权胜率不足30%！  
+【文章结束】  
+
+---  
+### 执行依据  
+- **降AI痕迹**：融入口语化表达（"血泪教训""必问三句话"）、真实维权策略（区块链存证）、技术术语（"血管化包膜剥离""4D内窥镜"）；  
+- **SEO适配**：标题含核心词"隆胸修复医院"，正文穿插"包膜挛缩""假体移位"等LSI词，密度5.2%；  
+- **EEAT合规**：引用消协报告[citation:6]、卫健委数据[citation:9]、整形协会统计[citation:4]，强化专业背书。；`;
+
+        function analyzeUserContent() {
+            const result = document.getElementById('content-analysis');
+            
+            const stats = {
+                totalLength: fullUserContent.length,
+                lineCount: fullUserContent.split('\n').length,
+                hasPipes: fullUserContent.includes('|'),
+                hasHeaders: /#{1,6}\s/.test(fullUserContent),
+                hasBold: /\*\*.*\*\*/.test(fullUserContent),
+                hasEmoji: /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(fullUserContent),
+                tableLineCount: fullUserContent.split('\n').filter(line => line.includes('|')).length
+            };
+            
+            // 检测可能的问题
+            const issues = [];
+            if (stats.hasPipes && stats.tableLineCount > 0) {
+                issues.push('✅ 包含表格结构');
+            }
+            if (stats.hasHeaders) {
+                issues.push('✅ 包含标题结构');
+            }
+            if (stats.hasBold) {
+                issues.push('✅ 包含粗体文本');
+            }
+            if (stats.hasEmoji) {
+                issues.push('⚠️ 包含emoji字符');
+            }
+            
+            result.innerHTML = `
+                <strong>内容统计:</strong><br>
+                总长度: ${stats.totalLength} 字符<br>
+                总行数: ${stats.lineCount} 行<br>
+                表格行数: ${stats.tableLineCount} 行<br>
+                包含竖线: ${stats.hasPipes ? '是' : '否'}<br>
+                包含标题: ${stats.hasHeaders ? '是' : '否'}<br>
+                包含粗体: ${stats.hasBold ? '是' : '否'}<br>
+                <br>
+                <strong>特征检测:</strong><br>
+                ${issues.join('<br>')}
+            `;
+        }
+        
+        function checkCharacterLevel() {
+            const result = document.getElementById('char-analysis');
+            
+            // 检查特殊字符
+            const specialChars = [];
+            const charCounts = {};
+            
+            for (let i = 0; i < fullUserContent.length; i++) {
+                const char = fullUserContent[i];
+                const code = char.charCodeAt(0);
+                
+                // 计数常见字符
+                charCounts[char] = (charCounts[char] || 0) + 1;
+                
+                // 检测特殊字符
+                if (code > 127 && code !== 8203) { // 排除零宽空格
+                    if (!specialChars.some(item => item.char === char)) {
+                        specialChars.push({char, code, name: getCharName(code)});
+                    }
+                }
+            }
+            
+            // 查找表格相关的行
+            const lines = fullUserContent.split('\n');
+            const tableLines = lines.filter((line, index) => {
+                if (line.includes('|')) {
+                    return {line, index: index + 1};
+                }
+                return null;
+            }).filter(Boolean);
+            
+            let analysis = '<strong>字符级别分析:</strong><br>';
+            analysis += `换行符数量: ${charCounts['\n'] || 0}<br>`;
+            analysis += `竖线数量: ${charCounts['|'] || 0}<br>`;
+            analysis += `星号数量: ${charCounts['*'] || 0}<br>`;
+            analysis += `井号数量: ${charCounts['#'] || 0}<br>`;
+            
+            if (specialChars.length > 0) {
+                analysis += '<br><strong>特殊字符:</strong><br>';
+                specialChars.slice(0, 10).forEach(item => {
+                    analysis += `"${item.char}" (U+${item.code.toString(16).toUpperCase()}) - ${item.name}<br>`;
+                });
+            }
+            
+            result.innerHTML = analysis;
+        }
+        
+        function getCharName(code) {
+            if (code >= 0x4E00 && code <= 0x9FFF) return '中文字符';
+            if (code >= 0x3000 && code <= 0x303F) return '中文标点';
+            if (code >= 0xFF00 && code <= 0xFFEF) return '全角字符';
+            if (code === 0x00A0) return '不间断空格';
+            if (code >= 0x2000 && code <= 0x206F) return '特殊空格';
+            if (code >= 0x1F600 && code <= 0x1F64F) return 'emoji表情';
+            if (code >= 0x2600 && code <= 0x26FF) return 'emoji符号';
+            return '其他Unicode字符';
+        }
+        
+        function validateTableStructure() {
+            const result = document.getElementById('table-validation');
+            
+            const lines = fullUserContent.split('\n');
+            const tableBlocks = [];
+            let currentTable = [];
+            let inTable = false;
+            
+            // 识别表格块
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                if (line.includes('|')) {
+                    if (!inTable) {
+                        inTable = true;
+                        currentTable = [];
+                    }
+                    currentTable.push({line, index: i + 1});
+                } else if (inTable && line === '') {
+                    // 空行可能在表格中间
+                    currentTable.push({line: '(空行)', index: i + 1});
+                } else if (inTable) {
+                    // 结束当前表格
+                    if (currentTable.length > 0) {
+                        tableBlocks.push([...currentTable]);
+                    }
+                    inTable = false;
+                    currentTable = [];
+                }
+            }
+            
+            // 处理最后一个表格
+            if (currentTable.length > 0) {
+                tableBlocks.push(currentTable);
+            }
+            
+            let validation = `<strong>表格结构验证:</strong><br>`;
+            validation += `发现 ${tableBlocks.length} 个表格块<br><br>`;
+            
+            tableBlocks.forEach((table, blockIndex) => {
+                validation += `<strong>表格 ${blockIndex + 1}:</strong><br>`;
+                validation += `行数: ${table.length}<br>`;
+                
+                // 检查分隔符行
+                const separatorLines = table.filter(row => 
+                    /^\s*\|[\s\-:]*\|\s*$/.test(row.line) || 
+                    /^\s*\|(\s*[\-:]+\s*\|)+\s*$/.test(row.line)
+                );
+                
+                validation += `分隔符行: ${separatorLines.length} 个<br>`;
+                
+                if (separatorLines.length === 0) {
+                    validation += `⚠️ 缺少分隔符行，这会导致表格无法渲染<br>`;
+                }
+                
+                // 检查空行
+                const emptyLines = table.filter(row => row.line === '(空行)');
+                if (emptyLines.length > 0) {
+                    validation += `❌ 包含 ${emptyLines.length} 个空行，会破坏表格结构<br>`;
+                }
+                
+                // 显示前几行
+                validation += `前几行:<br>`;
+                table.slice(0, 3).forEach(row => {
+                    const displayLine = row.line.length > 50 ? 
+                        row.line.substring(0, 50) + '...' : row.line;
+                    validation += `  行${row.index}: ${displayLine}<br>`;
+                });
+                
+                validation += '<br>';
+            });
+            
+            result.innerHTML = validation;
+        }
+        
+        function testMarkdownParsing() {
+            const result = document.getElementById('parsing-test');
+            const renderedDiv = document.getElementById('fixed-render');
+            
+            if (typeof markdownit === 'undefined') {
+                result.innerHTML = '❌ markdown-it 库未加载';
+                result.className = 'result error';
+                return;
+            }
+            
+            // 测试原始内容
+            const md = markdownit({ 
+                html: false, 
+                breaks: false, 
+                linkify: true, 
+                typographer: true 
+            });
+            
+            try {
+                const originalHtml = md.render(fullUserContent);
+                const originalHasTable = /<table/.test(originalHtml);
+                const originalTableCount = (originalHtml.match(/<table/g) || []).length;
+                
+                // 尝试修复表格结构
+                const fixedContent = fixTableStructure(fullUserContent);
+                const fixedHtml = md.render(fixedContent);
+                const fixedHasTable = /<table/.test(fixedHtml);
+                const fixedTableCount = (fixedHtml.match(/<table/g) || []).length;
+                
+                let testResult = '<strong>Markdown解析测试结果:</strong><br>';
+                testResult += `原始内容: ${originalHasTable ? `✅ 生成了 ${originalTableCount} 个表格` : '❌ 没有生成表格'}<br>`;
+                testResult += `修复后: ${fixedHasTable ? `✅ 生成了 ${fixedTableCount} 个表格` : '❌ 仍然没有表格'}<br>`;
+                
+                result.innerHTML = testResult;
+                result.className = fixedHasTable ? 'result success' : 'result warning';
+                
+                // 显示修复后的渲染结果
+                if (fixedHasTable) {
+                    renderedDiv.innerHTML = fixedHtml;
+                } else {
+                    renderedDiv.innerHTML = '<p style="color: orange;">修复后仍无法正确渲染表格，需要进一步分析</p>';
+                }
+                
+                // 提供解决方案
+                provideSolution(originalHasTable, fixedHasTable);
+                
+            } catch (error) {
+                result.innerHTML = `❌ 解析错误: ${error.message}`;
+                result.className = 'result error';
+            }
+        }
+        
+        function fixTableStructure(content) {
+            // 简单的表格修复：移除表格行之间的空行
+            return content
+                .replace(/\r\n/g, '\n')                    // 统一换行符
+                .replace(/\u00A0/g, ' ')                   // 替换不间断空格
+                .replace(/(\|.*\|)\n\s*\n(?=\|)/g, '$1\n') // 移除表格行间空行
+                .replace(/^\s+|\s+$/g, '')                 // 去除首尾空白
+                .replace(/[ \t]+$/gm, '');                 // 去除行尾空格
+        }
+        
+        function provideSolution(originalWorked, fixedWorked) {
+            const solutionDiv = document.getElementById('solution');
+            
+            let solution = '<h3>解决方案分析:</h3>';
+            
+            if (fixedWorked) {
+                solution += `
+                    <div class="success">
+                        ✅ <strong>问题已解决</strong><br>
+                        <strong>根本原因:</strong> 表格行之间的多余空行破坏了Markdown表格结构<br>
+                        <strong>解决方法:</strong> 使用文本清理函数移除表格行间的空行<br>
+                        <strong>应用建议:</strong> 在content.js中应用我们的增强提取策略
+                    </div>
+                `;
+            } else if (!originalWorked && !fixedWorked) {
+                solution += `
+                    <div class="warning">
+                        ⚠️ <strong>需要深度修复</strong><br>
+                        可能的问题:<br>
+                        1. 表格缺少分隔符行<br>
+                        2. 列数不一致<br>
+                        3. 包含特殊字符<br>
+                        4. 表格语法不规范<br>
+                        <strong>建议:</strong> 使用我们的增强提取策略从源头获取纯净数据
+                    </div>
+                `;
+            }
+            
+            solution += `
+                <br><strong>最终建议:</strong><br>
+                1. ✅ <strong>使用增强提取策略</strong>: 从input.value或data属性获取原始数据<br>
+                2. ✅ <strong>优先textContent</strong>: 避免innerText的CSS影响<br>
+                3. ✅ <strong>文本预清理</strong>: 应用cleanTextContent()函数<br>
+                4. ✅ <strong>源头解决</strong>: 在提取阶段就避免DOM污染
+            `;
+            
+            solutionDiv.innerHTML = solution;
+        }
+        
+        // 页面加载时自动运行所有测试
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                analyzeUserContent();
+                setTimeout(() => checkCharacterLevel(), 500);
+                setTimeout(() => validateTableStructure(), 1000);
+                setTimeout(() => testMarkdownParsing(), 1500);
+            }, 200);
+        });
+    </script>
+</body>
+</html>

@@ -49,12 +49,19 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     const isValidTab = isValidDocUrl(tab.url);
     
     if (!isValidTab) {
-      // 如果不是腾讯文档 sheet 模式页面，关闭侧边栏
-      chrome.sidePanel.close().catch(err => {
-        // 忽略错误
-        logMessage(`关闭侧边栏错误: ${err.message}`);
-      });
-      logMessage("标签页不是腾讯文档 sheet 模式，关闭侧边栏");
+      // 如果不是腾讯文档 sheet 模式页面，设置侧边栏不可用
+      // 注意：chrome.sidePanel.close() 在 Manifest V3 中不存在
+      // 替代方案：设置侧边栏为禁用状态
+      try {
+        chrome.sidePanel.setOptions({
+          tabId: activeInfo.tabId,
+          enabled: false
+        });
+        logMessage("标签页不是腾讯文档 sheet 模式，禁用侧边栏");
+      } catch (err) {
+        // 忽略错误，某些Chrome版本可能不支持此API
+        logMessage(`设置侧边栏状态错误: ${err.message}`);
+      }
     }
   });
 });
@@ -128,37 +135,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'close_sidepanel') {
     logMessage('收到关闭侧边栏请求，立即处理');
     
-    // 立即尝试关闭侧边栏
-    chrome.sidePanel.close()
-      .then(() => {
-        logMessage('侧边栏已成功关闭');
+    // 注意：chrome.sidePanel.close() 在 Manifest V3 中不存在
+    // 替代方案：通知内容脚本停止监听，用户可手动关闭侧边栏
+    logMessage('通知内容脚本停止监听（侧边栏需用户手动关闭）');
+    
+    // 获取当前活动的标签页来通知内容脚本
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        const tabId = tabs[0].id;
         
-        // 获取当前活动的标签页来通知内容脚本
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs && tabs.length > 0) {
-            const tabId = tabs[0].id;
-            
-            chrome.tabs.sendMessage(tabId, {
-              type: 'stop_listening'
-            }).then(() => {
-              logMessage('已通知内容脚本停止监听');
-            }).catch(err => {
-              logMessage(`通知内容脚本失败: ${err.message}`);
-            });
-          }
+        chrome.tabs.sendMessage(tabId, {
+          type: 'stop_listening'
+        }).then(() => {
+          logMessage('已通知内容脚本停止监听');
+        }).catch(err => {
+          logMessage(`通知内容脚本失败: ${err.message}`);
         });
-        
-        // 清理存储的内容（可选）
-        chrome.storage.local.remove(['lastMarkdownContent', 'timestamp'], () => {
-          logMessage('已清理存储的内容');
-        });
-        
-        sendResponse({ status: 'closed', success: true });
-      })
-      .catch(err => {
-        logMessage(`关闭侧边栏错误: ${err.message}`);
-        sendResponse({ status: 'error', message: err.message });
-      });
+      } else {
+        logMessage('没有找到活动的标签页');
+      }
+    });
+    
+    // 清理存储的内容（可选）
+    chrome.storage.local.remove(['lastMarkdownContent', 'timestamp'], () => {
+      logMessage('已清理存储的内容');
+    });
+    
+    sendResponse({ status: 'sidepanel_close_requested', success: true });
     
     // 返回 true 表示将异步发送响应
     return true;
@@ -212,31 +215,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const isPinned = data.isPinned !== undefined ? data.isPinned : true; // 默认开启
       
       if (isPinned && sender.tab) {
-        // 置顶开启时，确保侧边栏已打开并发送内容
-        chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
-          // 短暂延迟，确保侧边栏有足够时间加载
-          setTimeout(() => {
-            // 发送内容到侧边栏进行渲染
-            logMessage(`🚀 准备发送内容到侧边栏 (类型: ${contentType}, 长度: ${content.length})`);
-            chrome.runtime.sendMessage({
-              type: 'render_markdown',
-              content: content,
-              contentType: contentType,
-              timestamp: timestamp,
-              accessibilityMode: accessibilityMode
-            }).then(response => {
-              logMessage(`✅ 侧边栏响应: ${JSON.stringify(response)}`);
-            }).catch(err => {
-              logMessage(`❌ 发送到侧边栏失败: ${err.message}`);
-            });
-          }, 500);
+        // 置顶开启时，发送内容到侧边栏（如果已打开）
+        // 注意：不能在非用户手势的上下文中调用 sidePanel.open()
+        // 用户需要手动点击插件图标打开侧边栏
+        logMessage(`🚀 准备发送内容到侧边栏 (类型: ${contentType}, 长度: ${content.length})`);
+        chrome.runtime.sendMessage({
+          type: 'render_markdown',
+          content: content,
+          contentType: contentType,
+          timestamp: timestamp,
+          accessibilityMode: accessibilityMode
+        }).then(response => {
+          logMessage(`✅ 侧边栏响应: ${JSON.stringify(response)}`);
+        }).catch(err => {
+          logMessage(`❌ 发送到侧边栏失败: ${err.message} - 可能侧边栏未打开，请点击插件图标`);
         });
       } else {
-        // 置顶关闭时，关闭侧边栏并只存储内容
-        logMessage('置顶状态关闭，关闭侧边栏并存储内容');
-        chrome.sidePanel.close().catch(err => {
-          logMessage(`关闭侧边栏错误: ${err.message}`);
-        });
+        // 置顶关闭时，只存储内容不发送到侧边栏
+        logMessage('置顶状态关闭，仅存储内容');
       }
     });
     
@@ -254,12 +250,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const isValidTab = isValidDocUrl(tab.url);
     
     if (!isValidTab) {
-      // 如果不是腾讯文档 sheet 模式页面，关闭侧边栏
-      chrome.sidePanel.close().catch(err => {
-        // 忽略错误
-        logMessage(`关闭侧边栏错误: ${err.message}`);
-      });
-      logMessage(`标签页 ${tabId} 导航到非腾讯文档 sheet 模式页面，关闭侧边栏`);
+      // 如果不是腾讯文档 sheet 模式页面，设置侧边栏不可用
+      try {
+        chrome.sidePanel.setOptions({
+          tabId: tabId,
+          enabled: false
+        });
+        logMessage(`标签页 ${tabId} 导航到非腾讯文档 sheet 模式页面，禁用侧边栏`);
+      } catch (err) {
+        // 忽略错误，某些Chrome版本可能不支持此API
+        logMessage(`设置侧边栏状态错误: ${err.message}`);
+      }
     }
   }
 });

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试失败的表格渲染</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .error { color: red; border-left-color: red; }
+        .success { color: green; border-left-color: green; }
+        .warning { color: orange; border-left-color: orange; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>测试失败的表格渲染</h1>
+    
+    <div class="test-section">
+        <h2>原始内容</h2>
+        <pre id="original-content"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>表格检测测试</h2>
+        <button onclick="testTableDetection()">测试表格检测</button>
+        <div id="detection-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Markdown-it 渲染测试</h2>
+        <button onclick="testMarkdownIt()">测试 markdown-it 渲染</button>
+        <div id="markdownit-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>手动表格解析测试</h2>
+        <button onclick="testManualParsing()">测试手动解析</button>
+        <div id="manual-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>最终渲染结果</h2>
+        <div id="final-render"></div>
+    </div>
+
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+
+    <script>
+        // 用户提供的失败表格内容
+        const failingContent = `---
+
+
+
+
+### **预算参考**
+
+| 项目       | 费用（2人）       | 说明                     |
+
+|------------|------------------|--------------------------|
+
+| 充电+电费  | ¥600             | 按2200km×0.25元/km估算  |
+
+| 高速过路费 | ¥1100            | 单程约¥545[citation:3]   |
+
+| 住宿       | ¥3500-¥5000      | 7晚中高档酒店            |
+
+| 餐饮       | ¥2000            | 日均¥250（含特色餐）     |
+
+| 景点门票   | ¥800             | 岳阳楼¥70+君山船票¥80等 |
+
+
+
+
+---`;
+
+        // 显示原始内容
+        document.getElementById('original-content').textContent = failingContent;
+
+        function testTableDetection() {
+            const result = document.getElementById('detection-result');
+            
+            console.log('=== 表格检测分析 ===');
+            console.log('内容长度:', failingContent.length);
+            console.log('内容:', failingContent);
+            
+            // 基础检测
+            const hasBasicTable = /\|.*\|/.test(failingContent);
+            console.log('基础表格检测:', hasBasicTable);
+            
+            // 当前插件的检测逻辑
+            const hasTableCurrent = /\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*/.test(failingContent);
+            console.log('当前检测逻辑:', hasTableCurrent);
+            
+            // 更宽松的检测
+            const hasTableLoose = /\|.*\|[\s\S]*?\|[\s\-:]*\|/.test(failingContent);
+            console.log('宽松检测逻辑:', hasTableLoose);
+            
+            // 分析表格行
+            const lines = failingContent.split('\n');
+            const tableLines = [];
+            lines.forEach((line, i) => {
+                if (line.includes('|')) {
+                    tableLines.push({
+                        lineNumber: i + 1,
+                        content: line,
+                        isSeparator: /^\s*\|[\s\-:]*\|\s*$/.test(line),
+                        cellCount: line.split('|').filter(cell => cell.trim()).length
+                    });
+                }
+            });
+            
+            console.log('表格行分析:', tableLines);
+            
+            let resultHtml = `
+                <strong>检测结果:</strong><br>
+                基础表格检测: ${hasBasicTable ? '✅' : '❌'}<br>
+                当前检测逻辑: ${hasTableCurrent ? '✅' : '❌'}<br>
+                宽松检测逻辑: ${hasTableLoose ? '✅' : '❌'}<br>
+                <br>
+                <strong>表格行分析:</strong><br>
+            `;
+            
+            tableLines.forEach(line => {
+                resultHtml += `行${line.lineNumber}: ${line.isSeparator ? '[分隔符]' : '[数据]'} ${line.cellCount}列 - "${line.content}"<br>`;
+            });
+            
+            result.innerHTML = resultHtml;
+            result.className = hasTableCurrent ? 'result success' : 'result error';
+        }
+
+        function testMarkdownIt() {
+            const result = document.getElementById('markdownit-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span style="color: red;">❌ markdown-it 不可用</span>';
+                    result.className = 'result error';
+                    return;
+                }
+                
+                const md = markdownit({ 
+                    html: false, 
+                    breaks: false, 
+                    linkify: true,
+                    typographer: true
+                });
+                
+                const rendered = md.render(failingContent);
+                console.log('markdown-it 渲染结果:', rendered);
+                
+                const hasTable = /<table/.test(rendered);
+                const hasTableHeaders = /<th/.test(rendered);
+                const hasTableCells = /<td/.test(rendered);
+                
+                result.innerHTML = `
+                    <strong>markdown-it 渲染结果:</strong><br>
+                    包含table标签: ${hasTable ? '✅' : '❌'}<br>
+                    包含th标签: ${hasTableHeaders ? '✅' : '❌'}<br>
+                    包含td标签: ${hasTableCells ? '✅' : '❌'}<br>
+                    <br>
+                    <strong>生成的HTML:</strong><br>
+                    <pre style="max-height: 200px; overflow-y: auto;">${rendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                `;
+                
+                result.className = hasTable ? 'result success' : 'result error';
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 渲染错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        function testManualParsing() {
+            const result = document.getElementById('manual-result');
+            
+            try {
+                // 模拟插件的手动表格解析逻辑
+                const lines = failingContent.split('\n');
+                let inTable = false;
+                let tableLines = [];
+                let nonTableContent = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const isTableLine = /^\s*\|.*\|\s*$/.test(line);
+                    const isSeparator = /^\s*\|[\s\-:]*\|\s*$/.test(line);
+                    
+                    if (isTableLine) {
+                        if (!inTable) {
+                            inTable = true;
+                        }
+                        tableLines.push(line);
+                    } else if (inTable && line.trim() === '') {
+                        // 空行，继续保持在表格中
+                        continue;
+                    } else if (inTable) {
+                        // 非表格行，结束表格
+                        inTable = false;
+                        if (tableLines.length > 0) {
+                            // 处理表格
+                            break;
+                        }
+                    } else {
+                        nonTableContent.push(line);
+                    }
+                }
+                
+                console.log('手动解析 - 表格行:', tableLines);
+                console.log('手动解析 - 非表格内容:', nonTableContent);
+                
+                if (tableLines.length > 0) {
+                    // 尝试生成表格HTML
+                    let tableHTML = '<table>\n';
+                    let isHeader = true;
+                    
+                    for (const line of tableLines) {
+                        const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
+                        
+                        if (/^[\s\-:]+$/.test(cells.join(''))) {
+                            // 这是分隔符行，跳过
+                            isHeader = false;
+                            continue;
+                        }
+                        
+                        if (isHeader) {
+                            tableHTML += '  <tr>\n';
+                            cells.forEach(cell => {
+                                tableHTML += `    <th>${cell}</th>\n`;
+                            });
+                            tableHTML += '  </tr>\n';
+                            isHeader = false;
+                        } else {
+                            tableHTML += '  <tr>\n';
+                            cells.forEach(cell => {
+                                tableHTML += `    <td>${cell}</td>\n`;
+                            });
+                            tableHTML += '  </tr>\n';
+                        }
+                    }
+                    
+                    tableHTML += '</table>';
+                    
+                    result.innerHTML = `
+                        <strong>手动解析成功!</strong><br>
+                        找到${tableLines.length}行表格内容<br>
+                        <br>
+                        <strong>生成的表格:</strong><br>
+                        ${tableHTML}
+                        <br>
+                        <strong>生成的HTML代码:</strong><br>
+                        <pre>${tableHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    `;
+                    result.className = 'result success';
+                } else {
+                    result.innerHTML = '<span style="color: red;">❌ 手动解析没有找到表格内容</span>';
+                    result.className = 'result error';
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 手动解析错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('load', function() {
+            testTableDetection();
+            testMarkdownIt();
+            testManualParsing();
+        });
+    </script>
+</body>
+</html>

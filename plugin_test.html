@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>插件功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; }
+        .error { color: red; }
+        .success { color: green; }
+        button { padding: 8px 16px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>腾讯文档 Markdown 查看器 - 功能测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 库加载测试</h2>
+        <button onclick="testLibraries()">测试库加载</button>
+        <div id="lib-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Markdown-it 初始化测试</h2>
+        <button onclick="testMarkdownIt()">测试 markdown-it 初始化</button>
+        <div id="md-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 基本 Markdown 渲染测试</h2>
+        <button onclick="testBasicMarkdown()">测试基本渲染</button>
+        <div id="basic-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 表格渲染测试</h2>
+        <button onclick="testTableRendering()">测试表格渲染</button>
+        <div id="table-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. DOMPurify 测试</h2>
+        <button onclick="testDOMPurify()">测试 HTML 清理</button>
+        <div id="purify-result" class="result"></div>
+    </div>
+
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+
+    <script>
+        function testLibraries() {
+            const result = document.getElementById('lib-result');
+            let status = [];
+            
+            // 检查 markdown-it
+            if (typeof markdownit !== 'undefined') {
+                status.push('<span class="success">✅ markdown-it 已加载</span>');
+            } else {
+                status.push('<span class="error">❌ markdown-it 未加载</span>');
+            }
+            
+            // 检查 DOMPurify
+            if (typeof DOMPurify !== 'undefined') {
+                status.push('<span class="success">✅ DOMPurify 已加载</span>');
+            } else {
+                status.push('<span class="error">❌ DOMPurify 未加载</span>');
+            }
+            
+            result.innerHTML = status.join('<br>');
+        }
+
+        function testMarkdownIt() {
+            const result = document.getElementById('md-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span class="error">❌ markdown-it 不可用</span>';
+                    return;
+                }
+                
+                // 创建实例
+                const md = markdownit({
+                    html: false,
+                    xhtmlOut: false,
+                    breaks: false,
+                    linkify: true,
+                    typographer: true
+                });
+                
+                result.innerHTML = '<span class="success">✅ markdown-it 实例创建成功</span>';
+                
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ markdown-it 初始化失败: ${error.message}</span>`;
+            }
+        }
+
+        function testBasicMarkdown() {
+            const result = document.getElementById('basic-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span class="error">❌ markdown-it 不可用</span>';
+                    return;
+                }
+                
+                const md = markdownit({ html: false, breaks: false, linkify: true });
+                
+                const testContent = `# 标题测试
+                
+这是一个**粗体**文本和*斜体*文本的测试。
+
+- 列表项 1
+- 列表项 2
+
+\`代码片段\`测试`;
+
+                const rendered = md.render(testContent);
+                
+                result.innerHTML = `
+                    <span class="success">✅ 基本 Markdown 渲染成功</span><br>
+                    <strong>渲染结果:</strong><br>
+                    <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        ${rendered}
+                    </div>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ 基本渲染失败: ${error.message}</span>`;
+            }
+        }
+
+        function testTableRendering() {
+            const result = document.getElementById('table-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span class="error">❌ markdown-it 不可用</span>';
+                    return;
+                }
+                
+                const md = markdownit({ html: false, breaks: false, linkify: true });
+                
+                const simpleTable = `| 列1 | 列2 |
+|-----|-----|
+| 数据1 | 数据2 |
+| 数据3 | 数据4 |`;
+
+                const complexTable = `| **行业** | **核心风险场景** | **网安险保障重点** |
+|----------|------------------|-------------------|
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 |
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 |`;
+
+                const simpleRendered = md.render(simpleTable);
+                const complexRendered = md.render(complexTable);
+                
+                result.innerHTML = `
+                    <span class="success">✅ 表格渲染测试完成</span><br>
+                    
+                    <strong>简单表格:</strong><br>
+                    <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        ${simpleRendered}
+                    </div>
+                    
+                    <strong>复杂表格:</strong><br>
+                    <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        ${complexRendered}
+                    </div>
+                    
+                    <strong>检查结果:</strong><br>
+                    简单表格包含table标签: ${/<table/.test(simpleRendered) ? '✅' : '❌'}<br>
+                    复杂表格包含table标签: ${/<table/.test(complexRendered) ? '✅' : '❌'}
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ 表格渲染失败: ${error.message}</span>`;
+            }
+        }
+
+        function testDOMPurify() {
+            const result = document.getElementById('purify-result');
+            
+            try {
+                if (typeof DOMPurify === 'undefined') {
+                    result.innerHTML = '<span class="error">❌ DOMPurify 不可用</span>';
+                    return;
+                }
+                
+                const testHTML = '<table><tr><th>标题</th></tr><tr><td>数据</td></tr></table>';
+                const cleaned = DOMPurify.sanitize(testHTML, {
+                    ALLOWED_TAGS: ['table', 'tr', 'th', 'td', 'h1', 'h2', 'h3', 'p', 'strong', 'em'],
+                    ALLOWED_ATTR: []
+                });
+                
+                result.innerHTML = `
+                    <span class="success">✅ DOMPurify 测试成功</span><br>
+                    <strong>原始HTML:</strong> ${testHTML}<br>
+                    <strong>清理后:</strong> ${cleaned}<br>
+                    <strong>渲染效果:</strong><br>
+                    <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                        ${cleaned}
+                    </div>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ DOMPurify 测试失败: ${error.message}</span>`;
+            }
+        }
+
+        // 页面加载时自动运行基础测试
+        window.addEventListener('load', function() {
+            testLibraries();
+        });
+    </script>
+</body>
+</html>

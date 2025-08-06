@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DOM文本提取分析</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .dom-demo { border: 2px solid #007cba; padding: 15px; margin: 10px 0; background: #f9f9f9; }
+        .analysis { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; font-size: 12px; }
+        .char-by-char { font-family: monospace; font-size: 14px; }
+        .newline { background: #ffeb3b; color: #d32f2f; font-weight: bold; }
+        .space { background: #e3f2fd; }
+    </style>
+</head>
+<body>
+    <h1>DOM文本提取机制深度分析</h1>
+    
+    <div class="analysis">
+        <strong>问题：</strong>为什么插件提取的文本会比原始数据多出空行？<br>
+        <strong>分析重点：</strong>DOM结构 → innerText/textContent → 空行产生机制
+    </div>
+
+    <div class="test-section">
+        <h2>1. 模拟腾讯文档的DOM结构</h2>
+        <p>根据腾讯文档的实际DOM结构，模拟可能导致空行的情况：</p>
+        
+        <div class="dom-demo">
+            <h3>情况A: 标准DOM结构（无多余空行）</h3>
+            <div id="clean-dom">
+                <div>| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |</div>
+                <div>|----------|------------------|-------------------|-------------|</div>
+                <div>| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |</div>
+            </div>
+        </div>
+
+        <div class="dom-demo">
+            <h3>情况B: 带BR标签的DOM结构</h3>
+            <div id="br-dom">
+                <div>| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |<br></div>
+                <div>|----------|------------------|-------------------|-------------|<br></div>
+                <div>| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |<br></div>
+            </div>
+        </div>
+
+        <div class="dom-demo">
+            <h3>情况C: 带空DIV的DOM结构</h3>
+            <div id="empty-div-dom">
+                <div>| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |</div>
+                <div></div>
+                <div>|----------|------------------|-------------------|-------------|</div>
+                <div></div>
+                <div>| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |</div>
+            </div>
+        </div>
+
+        <div class="dom-demo">
+            <h3>情况D: 腾讯文档真实结构模拟</h3>
+            <div id="tencent-like-dom">
+                <div class="table-row">| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |</div>
+                <div class="table-separator">
+                    <span></span>
+                </div>
+                <div class="table-row">|----------|------------------|-------------------|-------------|</div>
+                <div class="table-separator">
+                    <span></span>
+                </div>
+                <div class="table-row">| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |</div>
+            </div>
+        </div>
+
+        <button onclick="analyzeAllStructures()">分析所有DOM结构</button>
+        <div id="structure-analysis" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. innerText vs textContent 行为对比</h2>
+        <button onclick="compareExtractionMethods()">对比提取方法</button>
+        <div id="extraction-comparison" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 字符级别分析</h2>
+        <button onclick="characterLevelAnalysis()">字符级别分析</button>
+        <div id="character-analysis" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 腾讯文档实际DOM结构检测</h2>
+        <button onclick="detectTencentStructure()">检测腾讯文档结构特征</button>
+        <div id="tencent-detection" class="result"></div>
+    </div>
+
+    <script>
+        function analyzeAllStructures() {
+            const result = document.getElementById('structure-analysis');
+            let analysis = '<strong>DOM结构分析结果:</strong><br><br>';
+            
+            const structures = [
+                { id: 'clean-dom', name: '标准DOM结构' },
+                { id: 'br-dom', name: '带BR标签结构' },
+                { id: 'empty-div-dom', name: '带空DIV结构' },
+                { id: 'tencent-like-dom', name: '腾讯文档模拟结构' }
+            ];
+            
+            structures.forEach(struct => {
+                const element = document.getElementById(struct.id);
+                const innerText = element.innerText;
+                const textContent = element.textContent;
+                
+                analysis += `<strong>${struct.name}:</strong><br>`;
+                analysis += `innerText行数: ${innerText.split('\n').length}<br>`;
+                analysis += `textContent行数: ${textContent.split('\n').length}<br>`;
+                analysis += `innerText包含空行: ${/\n\s*\n/.test(innerText) ? '是' : '否'}<br>`;
+                analysis += `textContent包含空行: ${/\n\s*\n/.test(textContent) ? '是' : '否'}<br>`;
+                analysis += '<br>';
+            });
+            
+            result.innerHTML = analysis;
+        }
+
+        function compareExtractionMethods() {
+            const result = document.getElementById('extraction-comparison');
+            const testElement = document.getElementById('tencent-like-dom');
+            
+            const innerText = testElement.innerText;
+            const textContent = testElement.textContent;
+            const innerHTML = testElement.innerHTML;
+            
+            let comparison = '<strong>提取方法对比:</strong><br><br>';
+            
+            comparison += '<strong>innerHTML:</strong><br>';
+            comparison += `<pre>${innerHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre><br>`;
+            
+            comparison += '<strong>textContent:</strong><br>';
+            comparison += `<pre>${textContent}</pre><br>`;
+            
+            comparison += '<strong>innerText:</strong><br>';
+            comparison += `<pre>${innerText}</pre><br>`;
+            
+            comparison += '<strong>关键差异:</strong><br>';
+            comparison += `- innerText和textContent是否相同: ${innerText === textContent ? '是' : '否'}<br>`;
+            comparison += `- innerText长度: ${innerText.length}<br>`;
+            comparison += `- textContent长度: ${textContent.length}<br>`;
+            
+            result.innerHTML = comparison;
+        }
+
+        function characterLevelAnalysis() {
+            const result = document.getElementById('character-analysis');
+            const testElement = document.getElementById('tencent-like-dom');
+            const text = testElement.innerText;
+            
+            let analysis = '<strong>字符级别分析:</strong><br><br>';
+            analysis += '<div class="char-by-char">';
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                let displayChar = char;
+                let className = '';
+                
+                if (char === '\n') {
+                    displayChar = '\\n';
+                    className = 'newline';
+                } else if (char === ' ') {
+                    displayChar = '·';
+                    className = 'space';
+                } else if (char === '\t') {
+                    displayChar = '\\t';
+                    className = 'newline';
+                }
+                
+                analysis += `<span class="${className}">${displayChar}</span>`;
+            }
+            
+            analysis += '</div><br>';
+            
+            // 分析连续换行
+            const consecutiveNewlines = text.match(/\n\s*\n/g);
+            analysis += `<strong>发现的连续换行模式:</strong><br>`;
+            if (consecutiveNewlines) {
+                consecutiveNewlines.forEach((match, i) => {
+                    analysis += `模式${i+1}: "${match.replace(/\n/g, '\\n').replace(/ /g, '·')}"<br>`;
+                });
+            } else {
+                analysis += '无连续换行<br>';
+            }
+            
+            result.innerHTML = analysis;
+        }
+
+        function detectTencentStructure() {
+            const result = document.getElementById('tencent-detection');
+            
+            let detection = '<strong>腾讯文档DOM结构特征检测:</strong><br><br>';
+            
+            // 检测常见的腾讯文档选择器
+            const tencentSelectors = [
+                '.formula-bar .formula-input',
+                '#alloy-simple-text-editor',
+                '.ae-formula-input',
+                '.formula-input',
+                '.ae-formula-bar',
+                '#mainContainer .formula-input',
+                '#formula_bar_ssr .formula-input',
+                '[role="combobox"][data-placeholder]'
+            ];
+            
+            detection += '<strong>腾讯文档选择器检测结果:</strong><br>';
+            tencentSelectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                detection += `${selector}: ${elements.length > 0 ? `找到${elements.length}个元素` : '未找到'}<br>`;
+            });
+            
+            detection += '<br><strong>可能导致空行的DOM特征:</strong><br>';
+            detection += '1. 空的span或div元素<br>';
+            detection += '2. CSS display:block导致的换行<br>';
+            detection += '3. 表格行之间的分隔符元素<br>';
+            detection += '4. 内联样式引起的格式化<br>';
+            detection += '5. 编辑器的富文本格式化<br>';
+            
+            detection += '<br><strong>建议的修复策略:</strong><br>';
+            detection += '1. 使用正则表达式清理连续空行<br>';
+            detection += '2. 优先使用textContent而非innerText<br>';
+            detection += '3. 针对表格内容进行专门的空行处理<br>';
+            detection += '4. 在提取后立即进行标准化处理<br>';
+            
+            result.innerHTML = detection;
+        }
+
+        // 页面加载时自动运行分析
+        window.addEventListener('load', function() {
+            analyzeAllStructures();
+            compareExtractionMethods();
+        });
+    </script>
+</body>
+</html>

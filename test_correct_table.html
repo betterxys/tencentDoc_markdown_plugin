@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试正确的表格格式</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .error { border-left-color: red; }
+        .success { border-left-color: green; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>测试正确的表格格式</h1>
+    
+    <div class="test-section">
+        <h2>用户提供的正确表格格式</h2>
+        <pre id="correct-content"></pre>
+    </div>
+
+    <div class="test-section">
+        <h2>markdown-it 配置测试</h2>
+        <button onclick="testMarkdownItConfig()">测试配置</button>
+        <div id="config-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>简单表格测试</h2>
+        <button onclick="testSimpleTable()">测试简单表格</button>
+        <div id="simple-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>实际表格渲染测试</h2>
+        <button onclick="testActualTable()">测试实际表格</button>
+        <div id="actual-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>特殊字符分析</h2>
+        <button onclick="testSpecialChars()">分析特殊字符</button>
+        <div id="chars-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>最终渲染效果</h2>
+        <div id="final-render"></div>
+    </div>
+
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+
+    <script>
+        // 用户提供的正确表格格式
+        const correctTableContent = `### **预算参考**
+| 项目       | 费用（2人）       | 说明                     |
+|------------|------------------|--------------------------|
+| 充电+电费  | ¥600             | 按2200km×0.25元/km估算  |
+| 高速过路费 | ¥1100            | 单程约¥545[citation:3]   |
+| 住宿       | ¥3500-¥5000      | 7晚中高档酒店            |
+| 餐饮       | ¥2000            | 日均¥250（含特色餐）     |
+| 景点门票   | ¥800             | 岳阳楼¥70+君山船票¥80等 |`;
+
+        // 显示原始内容
+        document.getElementById('correct-content').textContent = correctTableContent;
+
+        function testMarkdownItConfig() {
+            const result = document.getElementById('config-result');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span style="color: red;">❌ markdown-it 不可用</span>';
+                    result.className = 'result error';
+                    return;
+                }
+                
+                // 测试不同的配置
+                const configs = [
+                    { name: '基础配置', config: {} },
+                    { name: '启用表格', config: { html: false, breaks: false, linkify: true } },
+                    { name: '完整配置', config: { html: false, breaks: false, linkify: true, typographer: true } }
+                ];
+                
+                let configResults = '<strong>配置测试结果:</strong><br>';
+                
+                configs.forEach(({ name, config }) => {
+                    const md = markdownit(config);
+                    
+                    // 测试简单表格
+                    const simpleTable = '| A | B |\n|---|---|\n| 1 | 2 |';
+                    const rendered = md.render(simpleTable);
+                    const hasTable = /<table/.test(rendered);
+                    
+                    configResults += `${name}: ${hasTable ? '✅' : '❌'}<br>`;
+                });
+                
+                result.innerHTML = configResults;
+                result.className = 'result success';
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 配置测试错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        function testSimpleTable() {
+            const result = document.getElementById('simple-result');
+            
+            try {
+                const md = markdownit({ html: false, breaks: false, linkify: true });
+                
+                const simpleTable = `| A | B |
+|---|---|
+| 1 | 2 |`;
+                
+                const rendered = md.render(simpleTable);
+                const hasTable = /<table/.test(rendered);
+                
+                result.innerHTML = `
+                    <strong>简单表格测试:</strong><br>
+                    输入: <code>| A | B |\\n|---|---|\\n| 1 | 2 |</code><br>
+                    包含table标签: ${hasTable ? '✅' : '❌'}<br>
+                    <br>
+                    <strong>渲染结果:</strong><br>
+                    ${hasTable ? rendered : '<pre>' + rendered.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>'}
+                `;
+                
+                result.className = hasTable ? 'result success' : 'result error';
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 简单表格测试错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        function testActualTable() {
+            const result = document.getElementById('actual-result');
+            const finalRender = document.getElementById('final-render');
+            
+            try {
+                const md = markdownit({ html: false, breaks: false, linkify: true, typographer: true });
+                
+                const rendered = md.render(correctTableContent);
+                const hasTable = /<table/.test(rendered);
+                const hasHeader = /<th/.test(rendered);
+                const hasCells = /<td/.test(rendered);
+                
+                console.log('实际表格渲染结果:', rendered);
+                console.log('包含table:', hasTable);
+                console.log('包含th:', hasHeader);
+                console.log('包含td:', hasCells);
+                
+                result.innerHTML = `
+                    <strong>实际表格测试:</strong><br>
+                    包含table标签: ${hasTable ? '✅' : '❌'}<br>
+                    包含th标签: ${hasHeader ? '✅' : '❌'}<br>
+                    包含td标签: ${hasCells ? '✅' : '❌'}<br>
+                    <br>
+                    HTML长度: ${rendered.length} 字符<br>
+                    <br>
+                    <strong>生成的HTML:</strong><br>
+                    <pre style="max-height: 300px; overflow-y: auto;">${rendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                `;
+                
+                result.className = hasTable ? 'result success' : 'result error';
+                
+                // 显示最终效果
+                if (hasTable) {
+                    finalRender.innerHTML = `<h3>✅ 成功渲染的表格:</h3>${rendered}`;
+                } else {
+                    finalRender.innerHTML = `<h3>❌ 渲染失败</h3>`;
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 实际表格测试错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        function testSpecialChars() {
+            const result = document.getElementById('chars-result');
+            
+            try {
+                const md = markdownit({ html: false, breaks: false, linkify: true });
+                
+                // 测试包含特殊字符的表格
+                const specialCharsTable = `| 项目 | 费用 | 说明 |
+|------|------|------|
+| 充电 | ¥600 | 按2200km×0.25元/km估算 |
+| 过路费 | ¥1100 | 单程约¥545[citation:3] |
+| 住宿 | ¥3500-¥5000 | 7晚中高档酒店 |`;
+                
+                const cleanTable = `| 项目 | 费用 | 说明 |
+|------|------|------|
+| 充电 | 600元 | 按2200km计算 |
+| 过路费 | 1100元 | 单程约545元 |
+| 住宿 | 3500-5000元 | 7晚中高档酒店 |`;
+                
+                const specialRendered = md.render(specialCharsTable);
+                const cleanRendered = md.render(cleanTable);
+                
+                const specialHasTable = /<table/.test(specialRendered);
+                const cleanHasTable = /<table/.test(cleanRendered);
+                
+                result.innerHTML = `
+                    <strong>特殊字符影响分析:</strong><br>
+                    包含特殊字符(¥×[])的表格: ${specialHasTable ? '✅' : '❌'}<br>
+                    纯净字符的表格: ${cleanHasTable ? '✅' : '❌'}<br>
+                    <br>
+                    <strong>可能的问题字符:</strong><br>
+                    ¥ (人民币符号), × (乘号), [ ] (方括号), - (连字符)<br>
+                    <br>
+                    <strong>特殊字符表格HTML:</strong><br>
+                    <pre style="max-height: 200px; overflow-y: auto;">${specialRendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                `;
+                
+                result.className = 'result';
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 特殊字符测试错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('load', function() {
+            testMarkdownItConfig();
+            testSimpleTable();
+            setTimeout(() => {
+                testActualTable();
+                testSpecialChars();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown渲染修复验证</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .before, .after {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .after {
+            background: #e8f5e8;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #005a87; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        pre { background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Markdown渲染修复验证</h1>
+    <p>验证新的综合预处理功能是否修复了表格、标题、换行等渲染问题。</p>
+
+    <div class="test-section">
+        <h3>📋 测试内容（模拟腾讯文档提取的问题格式）</h3>
+        <pre id="testContent"></pre>
+        <button onclick="runTest()">测试修复效果</button>
+    </div>
+
+    <div class="test-section">
+        <h3>📊 修复前后对比</h3>
+        <h4>修复前渲染结果:</h4>
+        <div id="beforeResult" class="before"></div>
+        
+        <h4>修复后渲染结果:</h4>
+        <div id="afterResult" class="after"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>✅ 验证结果</h3>
+        <div id="validationResults"></div>
+    </div>
+
+    <script src="lib/markdown-it.min.js"></script>
+    <script>
+        // 配置markdown-it（修复前的配置）
+        const mdOld = markdownit({
+            html: false,
+            breaks: false,  // 修复前的设置
+            linkify: true,
+            typographer: true
+        });
+
+        // 配置markdown-it（修复后的配置）
+        const mdNew = markdownit({
+            html: false,
+            breaks: true,   // 修复后的设置
+            linkify: true,
+            typographer: true
+        });
+
+        // 问题内容（模拟腾讯文档提取的各种格式问题）
+        const problematicContent = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+
+|----------|------------------|-------------------|-------------|
+
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |
+
+
+
+### 🛡️ **二、网安险捆绑方案设计**
+- 基础保障套餐
+- 行业专属附加险
+
+
+- 技术减费机制
+这是保险+科技+服务的模式。`;
+
+        // 综合内容预处理函数（复制自sidepanel.js）
+        function preprocessTencentDocsContent(content) {
+            let processedContent = cleanTableStructure(content);
+            processedContent = fixHeaderFormatting(processedContent);
+            processedContent = fixListFormatting(processedContent);
+            processedContent = cleanExcessiveEmptyLines(processedContent);
+            return processedContent;
+        }
+
+        function cleanTableStructure(content) {
+            const lines = content.split('\n');
+            const cleanedLines = [];
+            let inTable = false;
+            let previousLineWasTable = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const isTableLine = /^\s*\|.*\|\s*$/.test(line) && line.trim() !== '|';
+                const isEmptyLine = line.trim() === '';
+                
+                if (isTableLine) {
+                    if (!inTable) inTable = true;
+                    cleanedLines.push(line);
+                    previousLineWasTable = true;
+                } else if (inTable && isEmptyLine && previousLineWasTable) {
+                    let nextTableLineIndex = -1;
+                    for (let j = i + 1; j < lines.length; j++) {
+                        const nextLine = lines[j];
+                        if (/^\s*\|.*\|\s*$/.test(nextLine) && nextLine.trim() !== '|') {
+                            nextTableLineIndex = j;
+                            break;
+                        } else if (nextLine.trim() !== '') {
+                            break;
+                        }
+                    }
+                    
+                    if (nextTableLineIndex > 0) {
+                        continue; // 跳过空行
+                    } else {
+                        inTable = false;
+                        cleanedLines.push(line);
+                        previousLineWasTable = false;
+                    }
+                } else {
+                    if (inTable && !isTableLine) inTable = false;
+                    cleanedLines.push(line);
+                    previousLineWasTable = false;
+                }
+            }
+            
+            return cleanedLines.join('\n');
+        }
+
+        function fixHeaderFormatting(content) {
+            const lines = content.split('\n');
+            const fixedLines = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const isHeader = /^#{1,6}\s/.test(line);
+                
+                if (isHeader) {
+                    if (i > 0 && fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+                        fixedLines.push('');
+                    }
+                    fixedLines.push(line);
+                    if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+                        fixedLines.push('');
+                    }
+                } else {
+                    fixedLines.push(line);
+                }
+            }
+            
+            return fixedLines.join('\n');
+        }
+
+        function fixListFormatting(content) {
+            const lines = content.split('\n');
+            const fixedLines = [];
+            let inList = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const isListItem = /^\s*[-*+]\s/.test(line) || /^\s*\d+\.\s/.test(line);
+                
+                if (isListItem) {
+                    if (!inList && fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+                        fixedLines.push('');
+                    }
+                    inList = true;
+                    fixedLines.push(line);
+                } else {
+                    if (inList && line.trim() !== '') {
+                        fixedLines.push('');
+                        inList = false;
+                    }
+                    fixedLines.push(line);
+                }
+            }
+            
+            return fixedLines.join('\n');
+        }
+
+        function cleanExcessiveEmptyLines(content) {
+            return content.replace(/\n\s*\n\s*\n+/g, '\n\n');
+        }
+
+        function runTest() {
+            console.log('开始测试...');
+            
+            // 显示测试内容
+            document.getElementById('testContent').textContent = problematicContent;
+            
+            // 修复前的渲染
+            const beforeHtml = mdOld.render(problematicContent);
+            document.getElementById('beforeResult').innerHTML = beforeHtml;
+            
+            // 修复后的渲染
+            const processedContent = preprocessTencentDocsContent(problematicContent);
+            const afterHtml = mdNew.render(processedContent);
+            document.getElementById('afterResult').innerHTML = afterHtml;
+            
+            // 验证结果
+            const beforeHasTable = /<table/.test(beforeHtml);
+            const afterHasTable = /<table/.test(afterHtml);
+            const beforeHasHeaders = /<h[1-6]/.test(beforeHtml);
+            const afterHasHeaders = /<h[1-6]/.test(afterHtml);
+            const beforeHasList = /<[uo]l/.test(beforeHtml);
+            const afterHasList = /<[uo]l/.test(afterHtml);
+            
+            const results = `
+                <div>
+                    <h4>🔍 检测结果:</h4>
+                    <p><strong>表格渲染:</strong> 
+                        修复前: ${beforeHasTable ? '<span class="success">✅</span>' : '<span class="error">❌</span>'} | 
+                        修复后: ${afterHasTable ? '<span class="success">✅</span>' : '<span class="error">❌</span>'}
+                    </p>
+                    <p><strong>标题渲染:</strong> 
+                        修复前: ${beforeHasHeaders ? '<span class="success">✅</span>' : '<span class="error">❌</span>'} | 
+                        修复后: ${afterHasHeaders ? '<span class="success">✅</span>' : '<span class="error">❌</span>'}
+                    </p>
+                    <p><strong>列表渲染:</strong> 
+                        修复前: ${beforeHasList ? '<span class="success">✅</span>' : '<span class="error">❌</span>'} | 
+                        修复后: ${afterHasList ? '<span class="success">✅</span>' : '<span class="error">❌</span>'}
+                    </p>
+                    
+                    <h4>📊 总体评估:</h4>
+                    <p>${afterHasTable && afterHasHeaders && afterHasList ? 
+                        '<span class="success">🎉 所有问题已修复！Markdown渲染正常工作</span>' : 
+                        '<span class="error">⚠️ 仍有部分问题需要进一步调试</span>'}</p>
+                </div>
+            `;
+            
+            document.getElementById('validationResults').innerHTML = results;
+            
+            console.log('测试完成');
+            console.log('修复前HTML长度:', beforeHtml.length);
+            console.log('修复后HTML长度:', afterHtml.length);
+            console.log('预处理后内容长度:', processedContent.length);
+        }
+
+        // 页面加载时显示测试内容
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('testContent').textContent = problematicContent;
+            console.log('页面加载完成，点击测试按钮开始验证修复效果...');
+        });
+    </script>
+</body>
+</html>

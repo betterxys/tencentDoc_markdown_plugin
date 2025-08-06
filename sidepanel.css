@@ -1409,4 +1409,91 @@ body.accessibility-mode .log-messages {
 body.accessibility-mode .log-messages p {
   line-height: 1.8;
   margin: 8px 0;
+}
+
+/* Mermaid 图表样式 */
+.mermaid-container {
+  margin: 20px 0;
+  padding: 15px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: #f8f9fa;
+  text-align: center;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.mermaid-container .mermaid {
+  display: inline-block;
+  max-width: 100%;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Mermaid 图表在无障碍模式下的样式 */
+body.accessibility-mode .mermaid-container {
+  border: 2px solid var(--a11y-border-color);
+  background: var(--a11y-background-color);
+}
+
+body.accessibility-mode .mermaid-container svg {
+  border: 1px solid var(--a11y-border-color);
+}
+
+/* Mermaid 错误显示样式 */
+.mermaid-container .error {
+  color: #d73a49;
+  background: #ffeef0;
+  border: 1px solid #fdbac5;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+  font-size: 14px;
+  text-align: left;
+}
+
+.mermaid-container .error details {
+  margin-top: 10px;
+}
+
+.mermaid-container .error summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #586069;
+}
+
+.mermaid-container .error summary:hover {
+  color: #24292e;
+}
+
+.mermaid-container .error pre {
+  background: #f1f1f1;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+}
+
+/* Mermaid 图表响应式设计 */
+@media (max-width: 600px) {
+  .mermaid-container {
+    margin: 15px 0;
+    padding: 10px;
+  }
+  
+  .mermaid-container svg {
+    transform-origin: top left;
+  }
 } 

@@ -432,20 +432,94 @@ class JSONRenderer {
   static isMarkdown(text) {
     if (!text || typeof text !== 'string' || text.length < 3) return false;
     
-    const patterns = [
-      /#{1,6}\s+.+/,
-      /\*\*[^*]+\*\*/,
-      /\*[^*]+\*/,
-      /\[.+?\]\(.+?\)/,
-      /```[\s\S]*?```/,
-      /`[^`\n]+`/,
-      /^\s*[-*+]\s+/m,
-      /^\s*\d+\.\s+/m,
-      /^\s*>\s+/m,
-      /\|.+\|/
-    ];
+    // 先排除JSON格式
+    const trimmed = text.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        JSON.parse(trimmed);
+        return false; // 是有效JSON，不是Markdown
+      } catch (e) {
+        // 继续检测，可能是包含JSON语法的Markdown
+      }
+    }
     
-    return patterns.some(pattern => pattern.test(text));
+    // 使用与content.js相同的智能检测逻辑
+    const markdownScore = this.calculateMarkdownScore(text);
+    return markdownScore >= 2;
+  }
+  
+  // 计算Markdown评分（与content.js保持一致）
+  static calculateMarkdownScore(text) {
+    let score = 0;
+    
+    // 1. 检查标题（权重高）
+    if (/^#{1,6}\s+.+/m.test(text)) score += 3;
+    
+    // 2. 检查强调格式
+    if (/\*\*[^*]+\*\*/.test(text)) score += 1;
+    if (/\*[^*]+\*/.test(text)) score += 1;
+    
+    // 3. 检查链接
+    if (/\[.+?\]\(.+?\)/.test(text)) score += 2;
+    
+    // 4. 检查代码块和行内代码
+    if (/```[\s\S]*?```/.test(text)) score += 3;
+    if (/`[^`\n]+`/.test(text)) score += 1;
+    
+    // 5. 智能检测列表
+    const listScore = this.detectListPattern(text);
+    score += listScore;
+    
+    // 6. 检查引用
+    if (/^\s*>\s+/m.test(text)) score += 2;
+    
+    // 7. 检查表格
+    if (/^\s*\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|\s*$/m.test(text)) score += 3;
+    
+    // 8. 检查分隔线
+    if (/^\s*[-=]{3,}\s*$/m.test(text)) score += 2;
+    
+    // 9. 检查其他格式
+    if (/~~[^~]+~~/.test(text)) score += 1;
+    if (/!\[.*?\]\(.+?\)/.test(text)) score += 2;
+    
+    return score;
+  }
+  
+  // 智能检测列表模式（与content.js保持一致）
+  static detectListPattern(text) {
+    const lines = text.split('\n');
+    let listLines = 0;
+    let totalLines = lines.filter(line => line.trim().length > 0).length;
+    
+    for (const line of lines) {
+      // 检查无序列表模式
+      if (/^\s*[-*+]\s+/.test(line)) {
+        // 额外验证：列表项通常不会以冒号结尾
+        const content = line.replace(/^\s*[-*+]\s+/, '').trim();
+        if (content.length > 2 && !content.endsWith(':') && !content.endsWith('：')) {
+          listLines++;
+        }
+      }
+      // 检查有序列表模式
+      else if (/^\s*\d+\.\s+/.test(line)) {
+        const content = line.replace(/^\s*\d+\.\s+/, '').trim();
+        if (content.length > 2) {
+          listLines++;
+        }
+      }
+    }
+    
+    // 如果超过30%的行是列表，且至少有2行列表，才认为是Markdown列表
+    if (listLines >= 2 && (listLines / totalLines) > 0.3) {
+      return 2;
+    }
+    if (listLines >= 1) {
+      return 1;
+    }
+    
+    return 0;
   }
   
   static escapeHtml(text) {
@@ -612,12 +686,148 @@ function renderContent(content, contentType) {
         markdownOutput.classList.add('hidden');
       }
       
+      // 渲染完成后处理 Mermaid 图表
+      processMermaidDiagrams();
+      
       logMessage('sidepanel', '渲染完成');
     } catch (error) {
       logMessage('error', `渲染过程中发生错误: ${error.message}`);
       showError(`渲染过程中发生错误: ${error.message}`);
     }
   }, 100);
+}
+
+// 处理 Mermaid 图表
+function processMermaidDiagrams() {
+  if (typeof mermaid === 'undefined') {
+    logMessage('sidepanel', 'Mermaid 库未加载，跳过图表处理');
+    return;
+  }
+
+  try {
+    // 查找所有 Mermaid 代码块
+    const mermaidBlocks = markdownOutput.querySelectorAll('pre code.language-mermaid, pre code[class*="mermaid"]');
+    
+    if (mermaidBlocks.length === 0) {
+      logMessage('sidepanel', '未找到 Mermaid 图表');
+      return;
+    }
+
+    logMessage('sidepanel', `找到 ${mermaidBlocks.length} 个 Mermaid 图表，开始处理`);
+
+    let processedCount = 0;
+    const promises = [];
+
+    mermaidBlocks.forEach((codeBlock, index) => {
+      const pre = codeBlock.parentElement;
+      const mermaidCode = codeBlock.textContent.trim();
+      
+      if (!mermaidCode) {
+        logMessage('sidepanel', `Mermaid 图表 ${index + 1} 为空，跳过`);
+        return;
+      }
+
+      logMessage('sidepanel', `处理 Mermaid 图表 ${index + 1}: ${mermaidCode.substring(0, 50)}...`);
+
+      // 创建一个容器来替换原来的 pre 元素
+      const mermaidContainer = document.createElement('div');
+      mermaidContainer.className = 'mermaid-container';
+      mermaidContainer.style.cssText = `
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        background: #f8f9fa;
+        text-align: center;
+        overflow-x: auto;
+      `;
+
+      const mermaidDiv = document.createElement('div');
+      const diagramId = `mermaid-diagram-${Date.now()}-${index}`;
+      mermaidDiv.id = diagramId;
+      mermaidDiv.className = 'mermaid';
+      mermaidDiv.style.cssText = `
+        display: inline-block;
+        max-width: 100%;
+        font-family: system-ui, -apple-system, sans-serif;
+      `;
+
+      // 渲染 Mermaid 图表
+      const promise = new Promise((resolve, reject) => {
+        try {
+          mermaid.render(diagramId + '-svg', mermaidCode).then(result => {
+            if (result && result.svg) {
+              mermaidDiv.innerHTML = result.svg;
+              logMessage('sidepanel', `Mermaid 图表 ${index + 1} 渲染成功`);
+              processedCount++;
+              resolve();
+            } else {
+              throw new Error('渲染结果为空');
+            }
+          }).catch(error => {
+            logMessage('error', `Mermaid 图表 ${index + 1} 渲染失败: ${error.message}`);
+            mermaidDiv.innerHTML = `
+              <div style="color: #d73a49; padding: 10px; font-size: 14px;">
+                <strong>Mermaid 图表渲染失败:</strong><br>
+                ${escapeHtml(error.message)}<br>
+                <details style="margin-top: 10px;">
+                  <summary style="cursor: pointer;">查看原始代码</summary>
+                  <pre style="background: #f1f1f1; padding: 10px; margin-top: 5px; text-align: left; white-space: pre-wrap;">${escapeHtml(mermaidCode)}</pre>
+                </details>
+              </div>
+            `;
+            reject(error);
+          });
+        } catch (error) {
+          logMessage('error', `Mermaid 图表 ${index + 1} 渲染异常: ${error.message}`);
+          mermaidDiv.innerHTML = `
+            <div style="color: #d73a49; padding: 10px; font-size: 14px;">
+              <strong>Mermaid 图表渲染异常:</strong><br>
+              ${escapeHtml(error.message)}<br>
+              <details style="margin-top: 10px;">
+                <summary style="cursor: pointer;">查看原始代码</summary>
+                <pre style="background: #f1f1f1; padding: 10px; margin-top: 5px; text-align: left; white-space: pre-wrap;">${escapeHtml(mermaidCode)}</pre>
+              </details>
+            </div>
+          `;
+          reject(error);
+        }
+      });
+
+      promises.push(promise);
+
+      // 添加标题
+      const title = document.createElement('div');
+      title.style.cssText = `
+        font-size: 14px;
+        color: #586069;
+        margin-bottom: 10px;
+        font-weight: 500;
+      `;
+      title.textContent = `📊 Mermaid 图表 ${index + 1}`;
+
+      mermaidContainer.appendChild(title);
+      mermaidContainer.appendChild(mermaidDiv);
+
+      // 替换原来的 pre 元素
+      pre.parentNode.replaceChild(mermaidContainer, pre);
+    });
+
+    // 等待所有图表处理完成
+    Promise.allSettled(promises).then(results => {
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+      
+      logMessage('sidepanel', `Mermaid 图表处理完成: ${successCount} 个成功, ${failCount} 个失败`);
+      
+      if (successCount > 0) {
+        logMessage('sidepanel', '✅ Mermaid 图表渲染完成');
+      }
+    });
+
+  } catch (error) {
+    logMessage('error', `处理 Mermaid 图表时出错: ${error.message}`);
+  }
 }
 
 // 显示加载状态
@@ -946,16 +1156,59 @@ function initializeMarkdownIt() {
       return;
     }
     
-    // 创建markdown-it实例，启用所有增强功能
+    // 创建markdown-it实例，优化配置以支持腾讯文档的内容格式
     window.md = markdownit({
       html: false,        // 不允许HTML标签
       xhtmlOut: false,    // 不使用XHTML输出
-      breaks: false,      // 不将换行符转换为<br>
+      breaks: true,       // 将换行符转换为<br> - 修复换行问题
       langPrefix: 'language-',  // CSS语言前缀
       linkify: true,      // 自动检测链接
-      typographer: true,  // 启用智能引号和其他排版增强
-      quotes: '""''',     // 智能引号字符
+      typographer: true   // 启用智能引号和其他排版增强
     });
+    
+    // 初始化 Mermaid
+    if (typeof mermaid !== 'undefined') {
+      logMessage('sidepanel', '初始化 Mermaid 图表库');
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+        htmlLabels: true,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        flowchart: {
+          useMaxWidth: true,
+          htmlLabels: true
+        },
+        sequence: {
+          useMaxWidth: true,
+          htmlLabels: true
+        },
+        gantt: {
+          useMaxWidth: true
+        },
+        journey: {
+          useMaxWidth: true
+        },
+        class: {
+          useMaxWidth: true
+        },
+        state: {
+          useMaxWidth: true
+        },
+        er: {
+          useMaxWidth: true
+        },
+        pie: {
+          useMaxWidth: true
+        },
+        quadrantChart: {
+          useMaxWidth: true
+        }
+      });
+      logMessage('sidepanel', 'Mermaid 初始化完成');
+    } else {
+      logMessage('error', 'Mermaid 库未加载');
+    }
     
     logMessage('sidepanel', 'markdown-it 实例创建成功');
     logMessage('sidepanel', `markdown-it 可用特性: ${Object.getOwnPropertyNames(window.md).slice(0, 10).join(', ')}`);
@@ -1079,7 +1332,9 @@ function start() {
     // 添加表格测试到全局作用域供调试使用
     window.testTableRendering = testTableRendering;
     window.testContentTableDetection = testContentTableDetection;
-    logMessage('sidepanel', '添加了全局调试函数: window.testTableRendering(), window.testContentTableDetection()');
+    window.testContentPreprocessing = testTableCleaning;
+    window.debugCurrentContent = debugCurrentContent;
+    logMessage('sidepanel', '添加了全局调试函数: window.testTableRendering(), window.testContentTableDetection(), window.testContentPreprocessing(), window.debugCurrentContent()');
   } catch (error) {
     console.error('侧边栏启动错误:', error);
     if (markdownOutput) {
@@ -1088,27 +1343,473 @@ function start() {
   }
 }
 
+// 综合内容预处理 - 修复腾讯文档提取内容的各种格式问题
+function preprocessTencentDocsContent(content) {
+  try {
+    logMessage('sidepanel', '=== 开始腾讯文档内容预处理 ===');
+    logMessage('sidepanel', `原始内容长度: ${content.length}`);
+    logMessage('sidepanel', `原始内容行数: ${content.split('\n').length}`);
+    logMessage('sidepanel', `原始内容前300字符: ${content.substring(0, 300)}`);
+    
+    // 显示原始内容的前几行用于调试
+    const originalLines = content.split('\n');
+    logMessage('sidepanel', '原始内容前10行:');
+    originalLines.slice(0, 10).forEach((line, i) => {
+      logMessage('sidepanel', `  ${i+1}: "${line}"`);
+    });
+    
+    let currentContent = content;
+    
+    // 1. 清理表格结构
+    logMessage('sidepanel', '--- 步骤1: 清理表格结构 ---');
+    const beforeTable = currentContent.length;
+    currentContent = cleanTableStructure(currentContent);
+    logMessage('sidepanel', `表格清理结果: ${beforeTable} → ${currentContent.length} 字符`);
+    
+    // 2. 修复标题格式（确保标题前后有空行）
+    logMessage('sidepanel', '--- 步骤2: 修复标题格式 ---');
+    const beforeHeader = currentContent.length;
+    currentContent = fixHeaderFormatting(currentContent);
+    logMessage('sidepanel', `标题修复结果: ${beforeHeader} → ${currentContent.length} 字符`);
+    
+    // 3. 修复列表格式
+    logMessage('sidepanel', '--- 步骤3: 修复列表格式 ---');
+    const beforeList = currentContent.length;
+    currentContent = fixListFormatting(currentContent);
+    logMessage('sidepanel', `列表修复结果: ${beforeList} → ${currentContent.length} 字符`);
+    
+    // 4. 清理多余的空行（但保留必要的段落分隔）
+    logMessage('sidepanel', '--- 步骤4: 清理多余空行 ---');
+    const beforeClean = currentContent.length;
+    currentContent = cleanExcessiveEmptyLines(currentContent);
+    logMessage('sidepanel', `空行清理结果: ${beforeClean} → ${currentContent.length} 字符`);
+    
+    // 显示处理后的内容
+    const processedLines = currentContent.split('\n');
+    logMessage('sidepanel', `处理后内容行数: ${processedLines.length}`);
+    logMessage('sidepanel', '处理后内容前10行:');
+    processedLines.slice(0, 10).forEach((line, i) => {
+      logMessage('sidepanel', `  ${i+1}: "${line}"`);
+    });
+    
+    logMessage('sidepanel', `=== 内容预处理完成：${content.length} → ${currentContent.length} 字符 ===`);
+    
+    // 如果内容没有任何变化，记录警告
+    if (currentContent === content) {
+      logMessage('sidepanel', '⚠️ 警告: 预处理后内容完全没有变化！');
+    }
+    
+    return currentContent;
+    
+  } catch (error) {
+    logMessage('error', `内容预处理失败: ${error.message}`);
+    logMessage('error', `错误堆栈: ${error.stack}`);
+    return content;
+  }
+}
+
+// 修复标题格式
+function fixHeaderFormatting(content) {
+  const lines = content.split('\n');
+  const fixedLines = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isHeader = /^#{1,6}\s/.test(line);
+    
+    if (isHeader) {
+      // 确保标题前有空行（除非是第一行）
+      if (i > 0 && fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+        fixedLines.push('');
+      }
+      fixedLines.push(line);
+      // 确保标题后有空行（除非下一行已经是空行）
+      if (i < lines.length - 1 && lines[i + 1].trim() !== '') {
+        fixedLines.push('');
+      }
+    } else {
+      fixedLines.push(line);
+    }
+  }
+  
+  return fixedLines.join('\n');
+}
+
+// 修复列表格式
+function fixListFormatting(content) {
+  const lines = content.split('\n');
+  const fixedLines = [];
+  let inList = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isListItem = /^\s*[-*+]\s/.test(line) || /^\s*\d+\.\s/.test(line);
+    
+    if (isListItem) {
+      if (!inList && fixedLines.length > 0 && fixedLines[fixedLines.length - 1].trim() !== '') {
+        // 列表开始前添加空行
+        fixedLines.push('');
+      }
+      inList = true;
+      fixedLines.push(line);
+    } else {
+      if (inList && line.trim() !== '') {
+        // 列表结束后添加空行
+        fixedLines.push('');
+        inList = false;
+      }
+      fixedLines.push(line);
+    }
+  }
+  
+  return fixedLines.join('\n');
+}
+
+// 清理多余的空行（保留段落间的单个空行）
+function cleanExcessiveEmptyLines(content) {
+  // 将多个连续空行替换为单个空行
+  return content.replace(/\n\s*\n\s*\n+/g, '\n\n');
+}
+
+// 清理表格结构 - 移除表格行间的多余空行
+function cleanTableStructure(content) {
+  try {
+    logMessage('sidepanel', '开始表格结构清理');
+    const lines = content.split('\n');
+    const cleanedLines = [];
+    let inTable = false;
+    let previousLineWasTable = false;
+    let tableRowCount = 0;
+    let removedEmptyLines = 0;
+    
+    logMessage('sidepanel', `输入总行数: ${lines.length}`);
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableLine = /^\s*\|.*\|\s*$/.test(line) && line.trim() !== '|';
+      const isEmptyLine = line.trim() === '';
+      
+      if (isTableLine) {
+        tableRowCount++;
+        if (!inTable) {
+          // 开始新表格
+          logMessage('sidepanel', `行${i+1}: 检测到表格开始: "${line}"`);
+          inTable = true;
+        } else {
+          logMessage('sidepanel', `行${i+1}: 表格行: "${line}"`);
+        }
+        cleanedLines.push(line);
+        previousLineWasTable = true;
+      } else if (inTable && isEmptyLine && previousLineWasTable) {
+        logMessage('sidepanel', `行${i+1}: 在表格中发现空行，检查下一行...`);
+        // 在表格中遇到空行 - 检查下一行是否还是表格行
+        let nextTableLineIndex = -1;
+        for (let j = i + 1; j < lines.length; j++) {
+          const nextLine = lines[j];
+          if (/^\s*\|.*\|\s*$/.test(nextLine) && nextLine.trim() !== '|') {
+            nextTableLineIndex = j;
+            logMessage('sidepanel', `  发现下一个表格行在第${j+1}行: "${nextLine}"`);
+            break;
+          } else if (nextLine.trim() !== '') {
+            logMessage('sidepanel', `  遇到非空非表格行在第${j+1}行: "${nextLine}"，表格结束`);
+            break; // 遇到非空非表格行，表格结束
+          }
+        }
+        
+        if (nextTableLineIndex > 0) {
+          // 跳过空行，继续表格
+          logMessage('sidepanel', `  跳过表格间空行`);
+          removedEmptyLines++;
+          continue;
+        } else {
+          // 表格结束
+          logMessage('sidepanel', `  表格结束，保留空行`);
+          inTable = false;
+          cleanedLines.push(line);
+          previousLineWasTable = false;
+        }
+      } else {
+        if (inTable && !isTableLine) {
+          logMessage('sidepanel', `行${i+1}: 表格结束于非表格行: "${line}"`);
+          inTable = false;
+        }
+        cleanedLines.push(line);
+        previousLineWasTable = false;
+      }
+    }
+    
+    logMessage('sidepanel', `表格清理完成:`);
+    logMessage('sidepanel', `  发现表格行数: ${tableRowCount}`);
+    logMessage('sidepanel', `  移除空行数: ${removedEmptyLines}`);
+    logMessage('sidepanel', `  输出行数: ${cleanedLines.length}`);
+    logMessage('sidepanel', `  字符数变化: ${lines.length} → ${cleanedLines.length} (${cleanedLines.length - lines.length})`);
+    
+    return cleanedLines.join('\n');
+  } catch (error) {
+    logMessage('error', `表格结构清理失败: ${error.message}`);
+    return content; // 失败时返回原内容
+  }
+}
+
+// 增强的表格检测函数
+function detectTables(content) {
+  try {
+    logMessage('sidepanel', '=== 开始表格检测 ===');
+    
+    // 方法1: 标准Markdown表格检测（包含分隔符行）
+    const standardTableRegex = /\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*/;
+    const hasStandardTable = standardTableRegex.test(content);
+    logMessage('sidepanel', `方法1-标准表格检测: ${hasStandardTable}`);
+    
+    if (hasStandardTable) {
+      const match = content.match(standardTableRegex);
+      if (match) {
+        logMessage('sidepanel', `  匹配的标准表格: "${match[0].substring(0, 100)}..."`);
+      }
+      return true;
+    }
+    
+    // 方法2: 检测至少2行以上的表格结构（即使没有分隔符）
+    logMessage('sidepanel', '方法2-多行表格检测:');
+    const lines = content.split('\n');
+    let tableLineCount = 0;
+    let consecutiveTableLines = 0;
+    const foundTableLines = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableLine = /^\s*\|.*\|\s*$/.test(line) && line.trim() !== '|';
+      
+      if (isTableLine) {
+        tableLineCount++;
+        consecutiveTableLines++;
+        foundTableLines.push(`行${i+1}: "${line}"`);
+        logMessage('sidepanel', `  发现表格行${tableLineCount}: "${line}"`);
+      } else if (line.trim() === '') {
+        // 空行不中断计数
+        logMessage('sidepanel', `  行${i+1}: 空行，不中断表格计数`);
+        continue;
+      } else {
+        // 重置连续计数
+        if (consecutiveTableLines > 0) {
+          logMessage('sidepanel', `  行${i+1}: 非表格行"${line}"，重置连续计数`);
+        }
+        consecutiveTableLines = 0;
+      }
+      
+      // 如果发现至少2行连续的表格行，认为是表格
+      if (consecutiveTableLines >= 2) {
+        logMessage('sidepanel', `  ✅ 发现${consecutiveTableLines}行连续表格，检测为表格`);
+        return true;
+      }
+    }
+    
+    logMessage('sidepanel', `方法2结果: 总表格行数=${tableLineCount}, 最大连续行数=${consecutiveTableLines}`);
+    
+    // 方法3: 如果总共有多行表格行，也认为可能是表格
+    const method3Result = tableLineCount >= 2;
+    logMessage('sidepanel', `方法3-总行数检测: ${method3Result} (需要>=2行，实际${tableLineCount}行)`);
+    
+    if (foundTableLines.length > 0) {
+      logMessage('sidepanel', '发现的所有表格行:');
+      foundTableLines.forEach(line => logMessage('sidepanel', `  ${line}`));
+    }
+    
+    logMessage('sidepanel', `=== 表格检测结果: ${method3Result} ===`);
+    return method3Result;
+    
+  } catch (error) {
+    logMessage('error', `表格检测失败: ${error.message}`);
+    return false;
+  }
+}
+
+// 调试当前内容的专用函数
+function debugCurrentContent() {
+  logMessage('sidepanel', '=== 调试当前内容 ===');
+  
+  // 获取当前显示的内容
+  let currentDisplayContent = currentContent || '';
+  
+  if (!currentDisplayContent) {
+    // 尝试从存储中获取
+    chrome.storage.local.get(['lastMarkdownContent'], function(data) {
+      if (data.lastMarkdownContent) {
+        currentDisplayContent = data.lastMarkdownContent;
+        logMessage('sidepanel', `从存储获取内容，长度: ${currentDisplayContent.length}`);
+        analyzeContent(currentDisplayContent);
+      } else {
+        logMessage('sidepanel', '❌ 没有找到当前内容');
+      }
+    });
+    return;
+  }
+  
+  analyzeContent(currentDisplayContent);
+}
+
+function analyzeContent(content) {
+  logMessage('sidepanel', `=== 分析内容（长度: ${content.length}）===`);
+  
+  // 1. 显示基本信息
+  const lines = content.split('\n');
+  logMessage('sidepanel', `总行数: ${lines.length}`);
+  logMessage('sidepanel', `首行: "${lines[0] || ''}"`);
+  logMessage('sidepanel', `末行: "${lines[lines.length - 1] || ''}"`);
+  
+  // 2. 查找可能的表格行
+  let tableLineCount = 0;
+  const possibleTableLines = [];
+  lines.forEach((line, i) => {
+    if (line.includes('|')) {
+      tableLineCount++;
+      possibleTableLines.push(`行${i+1}: "${line}"`);
+    }
+  });
+  
+  logMessage('sidepanel', `包含竖线的行数: ${tableLineCount}`);
+  if (possibleTableLines.length > 0) {
+    logMessage('sidepanel', '包含竖线的行:');
+    possibleTableLines.slice(0, 10).forEach(line => {
+      logMessage('sidepanel', `  ${line}`);
+    });
+  }
+  
+  // 3. 测试表格检测
+  const hasTable = detectTables(content);
+  logMessage('sidepanel', `表格检测结果: ${hasTable}`);
+  
+  // 4. 测试预处理
+  const processedContent = preprocessTencentDocsContent(content);
+  logMessage('sidepanel', `预处理结果长度: ${processedContent.length}`);
+  
+  // 5. 测试渲染
+  try {
+    if (typeof window.md !== 'undefined') {
+      const originalHtml = window.md.render(content);
+      const processedHtml = window.md.render(processedContent);
+      
+      const originalHasTable = /<table/.test(originalHtml);
+      const processedHasTable = /<table/.test(processedHtml);
+      
+      logMessage('sidepanel', `原始内容渲染表格: ${originalHasTable}`);
+      logMessage('sidepanel', `处理后渲染表格: ${processedHasTable}`);
+      logMessage('sidepanel', `原始HTML长度: ${originalHtml.length}`);
+      logMessage('sidepanel', `处理后HTML长度: ${processedHtml.length}`);
+      
+      // 显示实际的HTML开头
+      logMessage('sidepanel', `原始HTML开头: ${originalHtml.substring(0, 200)}`);
+      logMessage('sidepanel', `处理后HTML开头: ${processedHtml.substring(0, 200)}`);
+    } else {
+      logMessage('sidepanel', '❌ markdown-it 未初始化');
+    }
+  } catch (error) {
+    logMessage('error', `渲染测试失败: ${error.message}`);
+  }
+  
+  logMessage('sidepanel', '=== 内容分析完成 ===');
+}
+
+// 测试内容预处理功能
+function testTableCleaning() {
+  logMessage('sidepanel', '=== 开始腾讯文档内容预处理测试 ===');
+  
+  // 模拟用户失败的内容（包含多种格式问题）
+  const problematicContent = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+
+|----------|------------------|-------------------|-------------|
+
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |
+
+
+
+### 🛡️ **二、网安险捆绑方案设计**
+- 基础保障套餐
+- 行业专属附加险
+
+
+- 技术减费机制
+这是保险+科技+服务的模式。`;
+
+  logMessage('sidepanel', `原始内容长度: ${problematicContent.length}`);
+  logMessage('sidepanel', `原始内容行数: ${problematicContent.split('\n').length}`);
+  
+  // 测试综合预处理功能
+  const cleanedContent = preprocessTencentDocsContent(problematicContent);
+  logMessage('sidepanel', `预处理后内容长度: ${cleanedContent.length}`);
+  logMessage('sidepanel', `预处理后行数: ${cleanedContent.split('\n').length}`);
+  
+  // 测试检测功能
+  const originalHasTable = detectTables(problematicContent);
+  const cleanedHasTable = detectTables(cleanedContent);
+  logMessage('sidepanel', `原始内容表格检测: ${originalHasTable}`);
+  logMessage('sidepanel', `清理后表格检测: ${cleanedHasTable}`);
+  
+  // 测试渲染
+  try {
+    if (typeof window.md !== 'undefined') {
+      const originalHtml = window.md.render(problematicContent);
+      const cleanedHtml = window.md.render(cleanedContent);
+      
+      const originalHasTableHTML = /<table/.test(originalHtml);
+      const cleanedHasTableHTML = /<table/.test(cleanedHtml);
+      
+      logMessage('sidepanel', `原始内容生成表格HTML: ${originalHasTableHTML}`);
+      logMessage('sidepanel', `清理后生成表格HTML: ${cleanedHasTableHTML}`);
+      
+      if (cleanedHasTableHTML && !originalHasTableHTML) {
+        logMessage('sidepanel', '✅ 表格清理成功！修复了渲染问题');
+      } else if (cleanedHasTableHTML && originalHasTableHTML) {
+        logMessage('sidepanel', '✅ 两种内容都能正常渲染表格');
+      } else {
+        logMessage('sidepanel', '⚠️ 表格清理后仍无法正常渲染');
+      }
+      
+      // 更新渲染区域显示清理后的结果
+      markdownOutput.innerHTML = cleanedHtml;
+      updateContentInfo('markdown', cleanedContent);
+    }
+  } catch (error) {
+    logMessage('error', `渲染测试失败: ${error.message}`);
+  }
+  
+  logMessage('sidepanel', '=== 表格清理测试完成 ===');
+  return { original: problematicContent, cleaned: cleanedContent };
+}
+
 // 各种内容类型的渲染函数
 function renderMarkdownContent(content) {
   try {
     logMessage('sidepanel', `开始解析Markdown，内容长度: ${content.length}`);
     logMessage('sidepanel', `内容前200字符: ${content.substring(0, 200)}`);
     
-    // 改进的表格检测：需要有表头分隔符，支持多列表格
-    const hasTable = /\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*/.test(content);
+    // 综合预处理腾讯文档内容 - 修复表格、标题、列表等格式问题
+    const cleanedContent = preprocessTencentDocsContent(content);
+    
+    // 增强的表格检测：支持多种表格格式
+    const hasTable = detectTables(cleanedContent);
     logMessage('sidepanel', `检测到表格: ${hasTable}`);
     
     // 额外调试：显示匹配到的表格模式
     if (hasTable) {
-      const tableMatch = content.match(/\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/);
+      const tableMatch = cleanedContent.match(/\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/);
       if (tableMatch) {
         logMessage('sidepanel', `匹配到的表格内容: ${tableMatch[0].substring(0, 200)}...`);
       }
     } else {
       // 检查是否有简单的|字符但不是表格
-      const hasPipe = /\|/.test(content);
+      const hasPipe = /\|/.test(cleanedContent);
       if (hasPipe) {
-        const pipes = content.match(/\|[^|\n]*\|/g);
+        const pipes = cleanedContent.match(/\|[^|\n]*\|/g);
         logMessage('sidepanel', `发现竖线字符但非表格，示例: ${pipes ? pipes.slice(0, 3).join(', ') : '无'}`);
       }
     }
@@ -1122,15 +1823,15 @@ function renderMarkdownContent(content) {
         throw new Error('markdown-it 未初始化');
       }
       
-      // 使用markdown-it渲染
-      rawHtml = window.md.render(content);
+      // 使用清理后的内容进行渲染
+      rawHtml = window.md.render(cleanedContent);
       logMessage('sidepanel', 'markdown-it 渲染成功');
       
     } catch (e1) {
       logMessage('error', `markdown-it 渲染失败: ${e1.message}`);
       
-      // 回退到手动表格解析
-      rawHtml = parseMarkdownWithManualTables(content);
+      // 回退到手动表格解析（使用清理后的内容）
+      rawHtml = parseMarkdownWithManualTables(cleanedContent);
       logMessage('sidepanel', '使用手动表格解析');
     }
     
@@ -1141,10 +1842,10 @@ function renderMarkdownContent(content) {
     const hasTableHTML = /<table/.test(rawHtml);
     logMessage('sidepanel', `生成的HTML包含table标签: ${hasTableHTML}`);
     
-    // 配置DOMPurify以支持表格和必要的属性
+    // 配置DOMPurify以支持表格、Mermaid SVG和必要的属性
     const cleanHtml = DOMPurify.sanitize(rawHtml, {
-      ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+      ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'svg', 'g', 'path', 'circle', 'rect', 'line', 'text', 'tspan', 'defs', 'marker', 'polygon', 'polyline', 'ellipse', 'use', 'foreignObject'],
+      ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan', 'viewBox', 'width', 'height', 'x', 'y', 'dx', 'dy', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'transform', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'points', 'marker-end', 'marker-start', 'text-anchor', 'dominant-baseline', 'font-family', 'font-size', 'font-weight', 'xmlns', 'xmlns:xlink', 'xlink:href']
     });
     
     logMessage('sidepanel', `DOMPurify清理后长度: ${cleanHtml.length}`);
@@ -1228,6 +1929,43 @@ function parseMarkdownWithManualTables(content) {
     } else {
       return content;
     }
+  }
+}
+
+// 预处理表格内容，移除表格中的空行以改善markdown-it解析
+function preprocessTableContent(content) {
+  try {
+    const lines = content.split('\n');
+    const processedLines = [];
+    let inTable = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isTableLine = /^\s*\|.*\|\s*$/.test(line);
+      
+      if (isTableLine) {
+        inTable = true;
+        processedLines.push(line);
+      } else if (inTable && line.trim() === '') {
+        // 在表格中遇到空行，跳过不添加
+        continue;
+      } else if (inTable && !isTableLine) {
+        // 表格结束
+        inTable = false;
+        processedLines.push(line);
+      } else {
+        // 非表格内容，正常添加
+        processedLines.push(line);
+      }
+    }
+    
+    const result = processedLines.join('\n');
+    logMessage('sidepanel', `表格预处理：${lines.length}行 → ${processedLines.length}行`);
+    return result;
+    
+  } catch (error) {
+    logMessage('error', `表格预处理失败: ${error.message}`);
+    return content; // 失败时返回原内容
   }
 }
 

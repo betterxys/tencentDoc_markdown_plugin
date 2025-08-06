@@ -1,5 +1,16 @@
 // 内容脚本 - 负责从腾讯文档中提取 Markdown 内容
 
+// 清理文本内容，移除多余的空行和空白字符
+function cleanTextContent(text) {
+  if (!text || typeof text !== 'string') return '';
+  
+  return text
+    .replace(/\n\s*\n\s*\n/g, '\n\n')  // 将连续3个以上换行替换为2个
+    .replace(/^\s+|\s+$/g, '')          // 移除开头和结尾空白
+    .replace(/[ \t]+$/gm, '')           // 移除每行末尾的空格和制表符
+    .replace(/(\|.*\|)\n\s*\n(?=\|)/g, '$1\n');  // 专门处理表格行间的多余空行
+}
+
 const debug = true;
 
 // 配置常量
@@ -96,6 +107,88 @@ class ErrorHandler {
   }
 }
 
+// JSON内容修复工具
+function tryFixJSONContent(content) {
+  if (!content || typeof content !== 'string') return null;
+  
+  try {
+    logMessage(`🔧 尝试修复JSON内容，原始长度: ${content.length}`);
+    
+    let fixed = content.trim();
+    
+    // 1. 尝试直接解析
+    try {
+      JSON.parse(fixed);
+      logMessage(`✅ 内容本身就是有效JSON，无需修复`);
+      return fixed;
+    } catch (e) {
+      // 继续修复
+    }
+    
+    // 2. 如果是被引号包装的JSON字符串，先解包
+    if (fixed.startsWith('"') && fixed.endsWith('"')) {
+      try {
+        const unescaped = JSON.parse(fixed); // 这会解除转义
+        if (typeof unescaped === 'string') {
+          logMessage(`🔧 检测到双重JSON编码，正在解包...`);
+          try {
+            JSON.parse(unescaped);
+            logMessage(`✅ 成功解包双重编码的JSON`);
+            return unescaped;
+          } catch (e) {
+            // 继续其他修复方法
+          }
+        }
+      } catch (e) {
+        // 继续其他修复方法
+      }
+    }
+    
+    // 3. 移除DOM可能添加的额外换行和空格
+    fixed = fixed
+      .replace(/\n\s*\n/g, '\n')  // 移除多余空行
+      .replace(/\s+/g, ' ')       // 压缩多余空白
+      .trim();
+    
+    // 4. 尝试查找JSON对象的边界
+    let startIndex = fixed.indexOf('{');
+    let endIndex = fixed.lastIndexOf('}');
+    
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+      const jsonCandidate = fixed.substring(startIndex, endIndex + 1);
+      try {
+        JSON.parse(jsonCandidate);
+        logMessage(`✅ 成功提取JSON对象部分`);
+        return jsonCandidate;
+      } catch (e) {
+        // 继续其他修复方法
+      }
+    }
+    
+    // 5. 尝试查找JSON数组的边界
+    startIndex = fixed.indexOf('[');
+    endIndex = fixed.lastIndexOf(']');
+    
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+      const jsonCandidate = fixed.substring(startIndex, endIndex + 1);
+      try {
+        JSON.parse(jsonCandidate);
+        logMessage(`✅ 成功提取JSON数组部分`);
+        return jsonCandidate;
+      } catch (e) {
+        // 修复失败
+      }
+    }
+    
+    logMessage(`❌ JSON修复失败，无法恢复有效的JSON格式`);
+    return null;
+    
+  } catch (error) {
+    logMessage(`❌ JSON修复过程中出错: ${error.message}`);
+    return null;
+  }
+}
+
 // JSON处理工具
 class JSONProcessor {
   static isJSON(text) {
@@ -104,22 +197,64 @@ class JSONProcessor {
     const trimmed = text.trim();
     if (!trimmed) return false;
     
-    // 检查是否以JSON的开始符号开始
-    if (!(trimmed.startsWith('{') || trimmed.startsWith('[') || trimmed.startsWith('"'))) {
-      return false;
+    // 优先检查对象和数组（真正的JSON结构）
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        // 确保解析结果是对象或数组，不是基本类型
+        return typeof parsed === 'object' && parsed !== null;
+      } catch (e) {
+        // JSON.parse失败，可能是格式不完整或有错误
+        // 但如果从日志看起来像JSON，我们可以在这里记录
+        console.log(`[DEBUG] JSON解析失败但格式看起来像JSON: ${e.message.substring(0, 100)}`);
+        return false;
+      }
     }
     
-    try {
-      JSON.parse(trimmed);
-      return true;
-    } catch (e) {
-      return false;
+    // 对于字符串字面量，要更严格：只有当它本身就是JSON格式的字符串才认为是JSON
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        // 如果解析出来的字符串内容本身是JSON格式，才认为是JSON
+        if (typeof parsed === 'string') {
+          const innerTrimmed = parsed.trim();
+          if (innerTrimmed.startsWith('{') || innerTrimmed.startsWith('[')) {
+            try {
+              JSON.parse(innerTrimmed);
+              return true;
+            } catch (e) {
+              return false;
+            }
+          }
+        }
+        return false; // 普通字符串不算JSON
+      } catch (e) {
+        return false;
+      }
     }
+    
+    return false;
   }
   
   static parseJSON(text) {
     try {
-      return JSON.parse(text.trim());
+      const trimmed = text.trim();
+      let parsed = JSON.parse(trimmed);
+      
+      // 如果解析出来的是字符串，且这个字符串本身是JSON格式，则进一步解析
+      if (typeof parsed === 'string') {
+        const innerTrimmed = parsed.trim();
+        if ((innerTrimmed.startsWith('{') && innerTrimmed.endsWith('}')) ||
+            (innerTrimmed.startsWith('[') && innerTrimmed.endsWith(']'))) {
+          try {
+            parsed = JSON.parse(innerTrimmed);
+          } catch (e) {
+            // 如果内层解析失败，返回外层解析结果
+          }
+        }
+      }
+      
+      return parsed;
     } catch (e) {
       return null;
     }
@@ -169,47 +304,124 @@ class JSONProcessor {
 // 增强Markdown检测工具
 class MarkdownDetector {
   static MARKDOWN_PATTERNS = [
-    /#{1,6}\s+.+/,           // 标题
-    /\*\*[^*]+\*\*/,         // 粗体
-    /\*[^*]+\*/,            // 斜体
-    /\[.+?\]\(.+?\)/,        // 链接
-    /```[\s\S]*?```/,       // 代码块
-    /`[^`\n]+`/,            // 行内代码
-    /^\s*[-*+]\s+/m,        // 无序列表
-    /^\s*\d+\.\s+/m,        // 有序列表
-    /^\s*>\s+/m,            // 引用
-    /\|.+\|/,               // 表格
-    /^\s*[-=]{3,}\s*$/m,    // 分隔线
-    /~~[^~]+~~/,            // 删除线
-    /\$\$[\s\S]+?\$\$/,     // LaTeX数学公式块
-    /\$[^$\n]+\$/,          // 行内LaTeX公式
-    /!\[.*?\]\(.+?\)/,      // 图片
-    /\[\^.+?\]/             // 脚注
+    /#{1,6}\s+.+/,                                      // 标题
+    /\*\*[^*]+\*\*/,                                    // 粗体
+    /\*[^*]+\*/,                                        // 斜体
+    /\[.+?\]\(.+?\)/,                                   // 链接
+    /```[\s\S]*?```/,                                   // 代码块
+    /`[^`\n]+`/,                                        // 行内代码
+    /^\s*[-*+]\s+/m,                                    // 无序列表
+    /^\s*\d+\.\s+/m,                                    // 有序列表
+    /^\s*>\s+/m,                                        // 引用
+    /^\s*\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|\s*$/m,        // 表格（更严格的匹配）
+    /^\s*[-=]{3,}\s*$/m,                                // 分隔线
+    /~~[^~]+~~/,                                        // 删除线
+    /\$\$[\s\S]+?\$\$/,                                 // LaTeX数学公式块
+    /\$[^$\n]+\$/,                                      // 行内LaTeX公式
+    /!\[.*?\]\(.+?\)/,                                  // 图片
+    /\[\^.+?\]/                                         // 脚注
   ];
   
   static isMarkdown(text) {
     if (!text || typeof text !== 'string' || text.trim().length < 3) return false;
     
-    // 检查是否包含Markdown语法
-    const hasMarkdownSyntax = this.MARKDOWN_PATTERNS.some(pattern => 
-      pattern.test(text)
-    );
-    
-    // 如果没有明显的Markdown语法，检查是否为纯文本
-    if (!hasMarkdownSyntax) {
-      // 如果文本很短且没有特殊字符，可能不是Markdown
-      if (text.length < 20 && !/[#*`\[\]()_~$!]/.test(text)) {
-        return false;
-      }
-      
-      // 检查是否包含多行结构化内容
-      const lines = text.split('\n');
-      if (lines.length > 3 && lines.some(line => line.trim().length > 0)) {
-        return true;
+    // 先排除JSON格式
+    const trimmed = text.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        JSON.parse(trimmed);
+        return false; // 是有效JSON，不是Markdown
+      } catch (e) {
+        // 继续检测，可能是包含JSON语法的Markdown
       }
     }
     
-    return hasMarkdownSyntax;
+    // 智能检测Markdown语法
+    const markdownScore = this.calculateMarkdownScore(text);
+    
+    // 调试信息
+    if (markdownScore > 0) {
+      console.log(`[DEBUG] Markdown评分: ${markdownScore}, 内容前50字符: "${text.substring(0, 50)}"`);
+    }
+    
+    // 如果Markdown评分足够高，才认为是Markdown
+    return markdownScore >= 2;
+  }
+  
+  // 计算Markdown评分，返回匹配到的Markdown特征数量
+  static calculateMarkdownScore(text) {
+    let score = 0;
+    const lines = text.split('\n');
+    
+    // 1. 检查标题（权重高）
+    if (/^#{1,6}\s+.+/m.test(text)) score += 3;
+    
+    // 2. 检查强调格式
+    if (/\*\*[^*]+\*\*/.test(text)) score += 1;
+    if (/\*[^*]+\*/.test(text)) score += 1;
+    
+    // 3. 检查链接
+    if (/\[.+?\]\(.+?\)/.test(text)) score += 2;
+    
+    // 4. 检查代码块和行内代码
+    if (/```[\s\S]*?```/.test(text)) score += 3;
+    if (/`[^`\n]+`/.test(text)) score += 1;
+    
+    // 5. 智能检测列表（更严格）
+    const listScore = this.detectListPattern(text);
+    score += listScore;
+    
+    // 6. 检查引用
+    if (/^\s*>\s+/m.test(text)) score += 2;
+    
+    // 7. 检查表格
+    if (/^\s*\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|\s*$/m.test(text)) score += 3;
+    
+    // 8. 检查分隔线
+    if (/^\s*[-=]{3,}\s*$/m.test(text)) score += 2;
+    
+    // 9. 检查其他格式
+    if (/~~[^~]+~~/.test(text)) score += 1; // 删除线
+    if (/!\[.*?\]\(.+?\)/.test(text)) score += 2; // 图片
+    
+    return score;
+  }
+  
+  // 智能检测列表模式
+  static detectListPattern(text) {
+    const lines = text.split('\n');
+    let listLines = 0;
+    let totalLines = lines.filter(line => line.trim().length > 0).length;
+    
+    for (const line of lines) {
+      // 检查无序列表模式
+      if (/^\s*[-*+]\s+/.test(line)) {
+        // 额外验证：列表项通常不会以冒号结尾（避免误判如 "- 必做:" 这样的标题）
+        const content = line.replace(/^\s*[-*+]\s+/, '').trim();
+        if (content.length > 2 && !content.endsWith(':') && !content.endsWith('：')) {
+          listLines++;
+        }
+      }
+      // 检查有序列表模式
+      else if (/^\s*\d+\.\s+/.test(line)) {
+        const content = line.replace(/^\s*\d+\.\s+/, '').trim();
+        if (content.length > 2) {
+          listLines++;
+        }
+      }
+    }
+    
+    // 如果超过30%的行是列表，且至少有2行列表，才认为是Markdown列表
+    if (listLines >= 2 && (listLines / totalLines) > 0.3) {
+      return 2;
+    }
+    // 如果只有少量列表行，评分较低
+    if (listLines >= 1) {
+      return 1;
+    }
+    
+    return 0;
   }
   
   static getContentType(text) {
@@ -344,6 +556,7 @@ function extractTextContent(element) {
   
   // 1. 尝试获取值 (对于输入元素)
   if (element.value !== undefined && element.value !== null) {
+    logMessage(`📄 使用element.value获取内容 (最纯净): ${element.value.substring(0, 30)}...`);
     return element.value;
   }
   
@@ -353,7 +566,7 @@ function extractTextContent(element) {
   if (cellContent) {
     const text = cellContent.innerText || cellContent.textContent;
     if (text && text.trim()) {
-      logMessage("使用单元格内容容器中的文本");
+      logMessage(`📄 使用单元格内容容器中的文本 (可能有DOM污染): ${text.substring(0, 30)}...`);
       return text;
     }
   }
@@ -362,7 +575,7 @@ function extractTextContent(element) {
   if (element.classList.contains('paragraph') || element.classList.contains('para-graph')) {
     const text = element.innerText || element.textContent;
     if (text && text.trim()) {
-      logMessage("使用段落元素的文本");
+      logMessage(`📄 使用段落元素的文本 (可能有DOM污染): ${text.substring(0, 30)}...`);
       return text;
     }
   }
@@ -374,7 +587,7 @@ function extractTextContent(element) {
       // 获取富文本编辑器的内容
       const editorContent = editor.innerText || editor.textContent;
       if (editorContent && editorContent.trim().length > 0) {
-        logMessage("使用富文本编辑器的内容");
+        logMessage(`📄 使用富文本编辑器的内容 (可能有DOM污染): ${editorContent.substring(0, 30)}...`);
         return editorContent;
       }
     }
@@ -479,34 +692,94 @@ function extractCellContentFromDataModel(cellElement) {
   return '';
 }
 
-// 获取公式栏内容
+// 获取公式栏内容 - 使用增强的提取策略
 function extractFormulaBarContent() {
   try {
-    // 尝试从公式栏获取内容 - 根据test.html中的结构匹配选择器
-    const formulaBar = document.querySelector('.formula-bar .formula-input, #alloy-simple-text-editor, .ae-formula-input');
-    if (formulaBar) {
-      const content = formulaBar.innerText || formulaBar.textContent;
-      if (content && content.trim()) {
-        logMessage("从公式栏获取到内容");
-        return content.trim();
+    // 优先使用增强的提取策略
+    if (typeof EnhancedTextExtractor !== 'undefined') {
+      const enhancedResult = EnhancedTextExtractor.extractPureText();
+      if (enhancedResult) {
+        logMessage("✅ 使用增强提取策略获取到纯净内容");
+        return enhancedResult;
       }
     }
     
-    // 如果上面没找到，尝试更多类名
-    const additionalSelectors = [
+    // 回退到原有策略但优化顺序
+    logMessage("回退到传统提取方法");
+    
+    // 策略1: 优先从input.value获取（最纯净）
+    const inputSelectors = [
+      '.formula-input input',
+      '.ae-formula-input input', 
+      'input[role="combobox"]',
+      '.table-input-stage input'
+    ];
+    
+    for (const selector of inputSelectors) {
+      const input = document.querySelector(selector);
+      if (input && input.value) {
+        logMessage(`从input.value获取: ${selector}`);
+        return input.value.trim(); // 不需要额外清理
+      }
+    }
+    
+    // 策略2: 从HTML结构获取（保持换行符）
+    const htmlStructureSelectors = [
+      '.formula-bar .formula-input',
+      '#alloy-simple-text-editor', 
+      '.ae-formula-input'
+    ];
+    
+    for (const selector of htmlStructureSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        // 优先尝试从HTML结构中提取并保持格式
+        const htmlContent = element.innerHTML;
+        if (htmlContent && htmlContent.trim() && htmlContent !== element.textContent?.trim()) {
+          const structuredContent = extractTextFromHTML(htmlContent);
+          if (structuredContent && structuredContent.includes('\n')) {
+            logMessage(`从HTML结构获取: ${selector} (${structuredContent.split('\n').length}行)`);
+            return minimalCleanText(structuredContent);
+          }
+        }
+        
+        // 如果HTML没有结构化信息，尝试从textContent恢复结构
+        const content = element.textContent;
+        if (content && content.trim()) {
+          logMessage(`从textContent获取: ${selector}`);
+          // 尝试从纯文本中恢复换行结构
+          const restoredContent = restoreLineBreaksFromText(minimalCleanText(content));
+          if (restoredContent !== content) {
+            logMessage(`成功恢复换行结构: ${content.length} → ${restoredContent.length}字符`);
+            return restoredContent;
+          }
+          return minimalCleanText(content);
+        }
+      }
+    }
+    
+    // 策略3: 最后才使用innerText（可能有DOM污染，但尝试恢复换行）
+    const innerTextSelectors = [
       '#mainContainer .formula-input', 
       '.ae-formula-bar .ae-formula-input', 
       '#formula_bar_ssr .formula-input',
       '[role="combobox"][data-placeholder]'
     ];
     
-    for (const selector of additionalSelectors) {
+    for (const selector of innerTextSelectors) {
       const element = document.querySelector(selector);
       if (element) {
         const content = element.innerText || element.textContent;
         if (content && content.trim()) {
-          logMessage(`从${selector}获取到内容`);
-          return content.trim();
+          logMessage(`从innerText获取（需要清理）: ${selector}`);
+          // 首先尝试恢复换行结构
+          const restoredContent = restoreLineBreaksFromText(content);
+          if (restoredContent !== content) {
+            logMessage(`从innerText恢复换行结构: ${content.length} → ${restoredContent.length}字符`);
+            return cleanTextContent(restoredContent);
+          }
+          // 使用原有的清理函数
+          return cleanTextContent(content);
         }
       }
     }
@@ -515,6 +788,103 @@ function extractFormulaBarContent() {
   }
   
   return '';
+}
+
+// 最小化文本清理 - 只处理必要的格式化问题
+function minimalCleanText(text) {
+  if (!text || typeof text !== 'string') return '';
+  
+  return text
+    .replace(/\r\n/g, '\n')        // 统一换行符
+    .replace(/\u00A0/g, ' ')       // 替换不间断空格
+    .replace(/^\s+|\s+$/g, '')     // 去除首尾空白
+    .replace(/[ \t]+$/gm, '');     // 去除行尾空格
+}
+
+// 从HTML结构中提取文本并保持换行符
+function extractTextFromHTML(htmlContent) {
+  if (!htmlContent || typeof htmlContent !== 'string') return '';
+  
+  try {
+    // 创建临时DOM元素来解析HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    
+    // 将块级元素和换行标签转换为换行符
+    const blockElements = tempDiv.querySelectorAll('div, p, h1, h2, h3, h4, h5, h6, li, section, article');
+    blockElements.forEach(el => {
+      if (el.nextSibling) {
+        el.insertAdjacentText('afterend', '\n');
+      }
+    });
+    
+    // 将br标签转换为换行符
+    const brElements = tempDiv.querySelectorAll('br');
+    brElements.forEach(br => {
+      br.replaceWith('\n');
+    });
+    
+    // 处理列表结构
+    const listItems = tempDiv.querySelectorAll('li');
+    listItems.forEach(li => {
+      if (li.nextSibling) {
+        li.insertAdjacentText('afterend', '\n');
+      }
+    });
+    
+    // 处理表格结构
+    const tableRows = tempDiv.querySelectorAll('tr');
+    tableRows.forEach(tr => {
+      if (tr.nextSibling) {
+        tr.insertAdjacentText('afterend', '\n');
+      }
+    });
+    
+    // 获取最终文本
+    const extractedText = tempDiv.textContent || tempDiv.innerText || '';
+    logMessage(`HTML提取: ${htmlContent.length}字符 → ${extractedText.length}字符`);
+    
+    return extractedText;
+  } catch (error) {
+    logMessage(`HTML提取失败: ${error.message}`);
+    return '';
+  }
+}
+
+// 从纯文本中尝试恢复换行结构
+function restoreLineBreaksFromText(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  try {
+    // 在常见的Markdown和文本模式之间添加换行
+    let restored = text
+      // 在标题前后添加换行
+      .replace(/([^\n])(#{1,6}\s)/g, '$1\n$2')
+      .replace(/(#{1,6}[^\n]+)([^\n])/g, '$1\n$2')
+      
+      // 在表格行之间添加换行（如果检测到连续的表格行）
+      .replace(/(\|[^\|]*\|)(\s*)(\|[^\|]*\|)/g, '$1\n$3')
+      
+      // 在列表项前添加换行
+      .replace(/([^\n])(\s*[-*+]\s)/g, '$1\n$2')
+      .replace(/([^\n])(\s*\d+\.\s)/g, '$1\n$2')
+      
+      // 在段落之间添加换行（检测到句号+空格+大写字母的模式）
+      .replace(/([.!?])\s+([A-Z\u4e00-\u9fa5])/g, '$1\n\n$2')
+      
+      // 在引用块前添加换行
+      .replace(/([^\n])(>\s)/g, '$1\n$2')
+      
+      // 在代码块前后添加换行
+      .replace(/([^\n])(```)/g, '$1\n$2')
+      .replace(/(```[^\n]*)([^\n])/g, '$1\n$2');
+    
+    logMessage(`换行恢复: ${text.length}字符 → ${restored.length}字符`);
+    return restored;
+  } catch (error) {
+    logMessage(`换行恢复失败: ${error.message}`);
+    return text;
+  }
 }
 
 // 从单元格坐标获取内容
@@ -698,7 +1068,7 @@ function handleClick(event) {
 
 // 处理提取的内容
 function processExtractedContent(content) {
-  const cleanedContent = content?.trim() || '';
+  let cleanedContent = content?.trim() || '';
   
   if (!cleanedContent) {
     logMessage("提取的内容为空，不处理");
@@ -711,30 +1081,59 @@ function processExtractedContent(content) {
     return;
   }
   
-  // 检测内容类型
+  // 检测内容类型（添加详细调试信息）
   const contentType = MarkdownDetector.getContentType(cleanedContent);
   logMessage(`内容类型: ${contentType}, 长度: ${cleanedContent.length}`);
   
-  // 决定是否处理内容
+  // 添加内容来源和格式分析
+  const isLikelyJSON = cleanedContent.trim().startsWith('{') || cleanedContent.trim().startsWith('"{"');
+  const containsPipe = cleanedContent.includes('|');
+  logMessage(`内容分析: 疑似JSON=${isLikelyJSON}, 包含竖线=${containsPipe}, 前50字符: ${cleanedContent.substring(0, 50)}`);
+  
+  let finalContentType = contentType;
+  
+  if (contentType === 'markdown' && isLikelyJSON) {
+    logMessage(`⚠️ 警告: JSON内容被误识别为Markdown! 尝试修复...`);
+    
+    // 尝试强制重新检测为JSON
+    const fixedContent = tryFixJSONContent(cleanedContent);
+    if (fixedContent && JSONProcessor.isJSON(fixedContent)) {
+      logMessage(`✅ 成功修复JSON格式！重新设置内容类型为JSON`);
+      logMessage(`修复前内容长度: ${cleanedContent.length}, 修复后内容长度: ${fixedContent.length}`);
+      cleanedContent = fixedContent;
+      finalContentType = MarkdownDetector.getContentType(cleanedContent);
+      logMessage(`修复后内容类型: ${finalContentType}`);
+      logMessage(`修复后内容前50字符: ${cleanedContent.substring(0, 50)}`);
+    } else if (fixedContent) {
+      // 即使JSON检测失败，但修复成功，也强制设为JSON
+      logMessage(`🔧 JSON修复成功但检测失败，强制设置为JSON类型`);
+      cleanedContent = fixedContent;
+      finalContentType = 'json';
+    } else {
+      logMessage(`❌ JSON修复失败，保持原始内容类型: ${contentType}`);
+    }
+  }
+  
+  // 决定是否处理内容（使用修复后的内容类型）
   const shouldProcess = 
-    contentType === 'markdown' || 
-    contentType === 'json-with-markdown' || 
-    contentType === 'json' ||
-    contentType === 'code' ||
-    contentType === 'table' ||
+    finalContentType === 'markdown' || 
+    finalContentType === 'json-with-markdown' || 
+    finalContentType === 'json' ||
+    finalContentType === 'code' ||
+    finalContentType === 'table' ||
     cleanedContent.length > 50 ||
-    (contentType === 'text' && cleanedContent.length >= 3); // 处理普通文本内容，最少3个字符
+    (finalContentType === 'text' && cleanedContent.length >= 3); // 处理普通文本内容，最少3个字符
   
   if (shouldProcess) {
     lastProcessedContent = cleanedContent;
     
-    logMessage(`✅ 决定处理内容 (类型: ${contentType}, 长度: ${cleanedContent.length})`);
+    logMessage(`✅ 决定处理内容 (类型: ${finalContentType}, 长度: ${cleanedContent.length})`);
     logMessage(`处理内容: ${cleanedContent.substring(0, 50)}${cleanedContent.length > 50 ? '...' : ''}`);
     
-    // 发送内容到背景脚本
-    sendContentToBackground(cleanedContent, contentType);
+    // 发送内容到背景脚本（使用修复后的内容和类型）
+    sendContentToBackground(cleanedContent, finalContentType);
   } else {
-    logMessage(`❌ 跳过处理: 内容类型为 ${contentType}，长度为 ${cleanedContent.length}，不符合处理条件`);
+    logMessage(`❌ 跳过处理: 内容类型为 ${finalContentType}，长度为 ${cleanedContent.length}，不符合处理条件`);
   }
 }
 
@@ -769,33 +1168,36 @@ function processTableCellContent() {
     let content = '';
     
     // 1. 首先尝试从公式栏获取内容
-    logMessage("方法1: 尝试从公式栏获取内容");
+    logMessage("📊 方法1: 尝试从公式栏获取内容");
     content = extractFormulaBarContent();
     if (content) {
-      logMessage(`从公式栏获取到内容: ${content.substring(0, 50)}...`);
+      logMessage(`✅ 从公式栏获取到内容 [来源:FORMULA_BAR]: ${content.substring(0, 50)}...`);
+      logMessage(`📋 公式栏内容格式分析: 长度=${content.length}, 首字符='${content.charAt(0)}', 疑似JSON=${content.trim().startsWith('{') || content.trim().startsWith('"')}`);
     } else {
-      logMessage("公式栏没有内容");
+      logMessage("❌ 公式栏没有内容");
     }
     
     // 2. 如果未获取到内容，尝试从单元格坐标获取
     if (!content) {
-      logMessage("方法2: 尝试从单元格坐标获取内容");
+      logMessage("🎯 方法2: 尝试从单元格坐标获取内容");
       content = extractContentByCellCoordinate();
       if (content) {
-        logMessage(`从单元格坐标获取到内容: ${content.substring(0, 50)}...`);
+        logMessage(`✅ 从单元格坐标获取到内容 [来源:CELL_COORDINATE]: ${content.substring(0, 50)}...`);
+        logMessage(`📋 单元格内容格式分析: 长度=${content.length}, 首字符='${content.charAt(0)}', 疑似JSON=${content.trim().startsWith('{') || content.trim().startsWith('"')}`);
       } else {
-        logMessage("单元格坐标方法没有获取到内容");
+        logMessage("❌ 单元格坐标方法没有获取到内容");
       }
     }
     
     // 3. 如果公式栏没有内容，尝试从数据模型获取
     if (!content) {
-      logMessage("方法3: 尝试从数据模型获取内容");
+      logMessage("🔧 方法3: 尝试从数据模型获取内容");
       content = extractCellContentFromDataModel();
       if (content) {
-        logMessage(`从数据模型获取到内容: ${content.substring(0, 50)}...`);
+        logMessage(`✅ 从数据模型获取到内容 [来源:DATA_MODEL]: ${content.substring(0, 50)}...`);
+        logMessage(`📋 数据模型内容格式分析: 长度=${content.length}, 首字符='${content.charAt(0)}', 疑似JSON=${content.trim().startsWith('{') || content.trim().startsWith('"')}`);
       } else {
-        logMessage("数据模型方法没有获取到内容");
+        logMessage("❌ 数据模型方法没有获取到内容");
       }
     }
   
@@ -820,7 +1222,8 @@ function processTableCellContent() {
           const selectionContent = extractTextContent(element);
           if (selectionContent) {
             content = selectionContent;
-            logMessage(`从${selector}获取到内容`);
+            logMessage(`✅ 从DOM选择器获取到内容 [来源:DOM_SELECTOR] [选择器:${selector}]: ${selectionContent.substring(0, 50)}...`);
+            logMessage(`📋 DOM内容格式分析: 长度=${selectionContent.length}, 首字符='${selectionContent.charAt(0)}', 疑似JSON=${selectionContent.trim().startsWith('{') || selectionContent.trim().startsWith('"')}`);
             break;
           }
         }
@@ -859,7 +1262,8 @@ function processTableCellContent() {
               const inputContent = extractTextContent(input);
               if (inputContent) {
                 content = inputContent;
-                logMessage("从活动单元格附近的输入区域获取内容");
+                logMessage(`✅ 从活动单元格获取到内容 [来源:ACTIVE_CELL_INPUT]: ${inputContent.substring(0, 50)}...`);
+                logMessage(`📋 活动单元格内容格式分析: 长度=${inputContent.length}, 首字符='${inputContent.charAt(0)}', 疑似JSON=${inputContent.trim().startsWith('{') || inputContent.trim().startsWith('"')}`);
                 break;
               }
             }
@@ -1228,8 +1632,9 @@ function initialize() {
     logMessage("页面完全加载");
     debugCellStructure();
     
-    // 注入脚本以访问内部API
-    injectScriptToAccessInternalAPI();
+    // 移除脚本注入以避免CSP违规
+    // injectScriptToAccessInternalAPI(); // 已禁用 - 违反CSP策略
+    logMessage("跳过脚本注入（CSP限制）- 使用现有的文本提取方法");
   });
   
   // 立即进行DOM结构分析
@@ -1244,6 +1649,11 @@ function initialize() {
 
 // 注入脚本以访问内部API
 function injectScriptToAccessInternalAPI() {
+  logMessage("⚠️ 脚本注入已禁用 - 违反Content Security Policy");
+  logMessage("使用现有的DOM文本提取方法作为替代方案");
+  return; // 提前返回，不执行注入逻辑
+  
+  // 以下代码已禁用以避免CSP违规
   logMessage("注入脚本以访问内部API");
   
   const scriptContent = `

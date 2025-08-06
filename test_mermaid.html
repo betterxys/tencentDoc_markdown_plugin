@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid 图表渲染测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #005a87; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        pre { background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .mermaid-container {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            background: #f8f9fa;
+            text-align: center;
+            overflow-x: auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Mermaid 图表渲染测试</h1>
+    <p>测试新添加的 Mermaid 图表渲染功能</p>
+
+    <div class="test-section">
+        <h3>📋 测试用例</h3>
+        <button onclick="testFlowchart()">测试流程图</button>
+        <button onclick="testSequence()">测试序列图</button>
+        <button onclick="testGantt()">测试甘特图</button>
+        <button onclick="testMarkdownWithMermaid()">测试完整 Markdown + Mermaid</button>
+    </div>
+
+    <div class="test-section">
+        <h3>📊 渲染结果</h3>
+        <div id="renderResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>✅ 验证结果</h3>
+        <div id="validationResults"></div>
+    </div>
+
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <script src="lib/mermaid.min.js"></script>
+    <script>
+        // 初始化 markdown-it
+        const md = markdownit({
+            html: false,
+            breaks: true,
+            linkify: true,
+            typographer: true
+        });
+
+        // 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            htmlLabels: true,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+
+        // 测试用例数据
+        const testCases = {
+            flowchart: `# 机器人威胁感知流程
+
+\`\`\`mermaid
+graph TB
+  A[机器人威胁感知] --> B{风险等级评估}
+  B -- 高风险 --> C[自动隔离受感染模块]
+  B -- 中风险 --> D[T-ONE平台预警推送]
+  C --> E[触发保险预赔通道]
+  D --> F[天创安全团队介入加固]
+  E --> G[72小时内支付50%预估损失]
+\`\`\`
+
+这是一个展示机器人威胁感知与保险预赔流程的图表。`,
+
+            sequence: `# 用户交互序列
+
+\`\`\`mermaid
+sequenceDiagram
+    participant User as 用户
+    participant System as 系统
+    participant AI as AI助手
+    participant DB as 数据库
+    
+    User->>System: 提交问题
+    System->>AI: 转发请求
+    AI->>DB: 查询相关数据
+    DB-->>AI: 返回数据
+    AI->>AI: 处理和分析
+    AI-->>System: 生成回复
+    System-->>User: 返回答案
+\`\`\`
+
+这展示了系统的交互流程。`,
+
+            gantt: `# 项目时间线
+
+\`\`\`mermaid
+gantt
+    title 项目开发计划
+    dateFormat  YYYY-MM-DD
+    section 需求分析
+    需求收集           :done,    des1, 2024-01-01,2024-01-15
+    需求分析           :done,    des2, 2024-01-10, 10d
+    section 开发阶段
+    前端开发           :active,  dev1, 2024-01-20, 20d
+    后端开发           :         dev2, 2024-01-25, 25d
+    section 测试部署
+    系统测试           :         test1, after dev2, 10d
+    部署上线           :         deploy, after test1, 5d
+\`\`\`
+
+这是项目的开发时间线。`
+        };
+
+        function testFlowchart() {
+            renderTest('流程图', testCases.flowchart);
+        }
+
+        function testSequence() {
+            renderTest('序列图', testCases.sequence);
+        }
+
+        function testGantt() {
+            renderTest('甘特图', testCases.gantt);
+        }
+
+        function testMarkdownWithMermaid() {
+            const complexContent = `# 综合测试文档
+
+## 1. 流程图示例
+${testCases.flowchart}
+
+## 2. 列表内容
+- 第一项内容
+- 第二项内容
+- **重要**：这里包含粗体文本
+
+## 3. 表格示例
+| 功能 | 状态 | 备注 |
+|------|------|------|
+| Markdown 渲染 | ✅ 已完成 | 基本功能正常 |
+| Mermaid 图表 | 🧪 测试中 | 新功能测试 |
+| 表格渲染 | ✅ 已完成 | 支持复杂表格 |
+
+## 4. 代码示例
+\`\`\`javascript
+function renderMermaid() {
+    console.log('正在渲染 Mermaid 图表...');
+}
+\`\`\`
+
+这是一个包含多种元素的综合测试文档。`;
+            
+            renderTest('综合测试', complexContent);
+        }
+
+        function renderTest(testName, content) {
+            console.log(`开始测试: ${testName}`);
+            
+            // 显示原始内容
+            const resultDiv = document.getElementById('renderResult');
+            resultDiv.innerHTML = `
+                <h4>🔍 测试: ${testName}</h4>
+                <details>
+                    <summary>查看原始 Markdown 内容</summary>
+                    <pre>${escapeHtml(content)}</pre>
+                </details>
+                <h5>渲染结果:</h5>
+                <div id="renderedContent"></div>
+            `;
+            
+            try {
+                // 使用 markdown-it 渲染
+                const html = md.render(content);
+                
+                // 使用 DOMPurify 清理 HTML
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'svg', 'g', 'path', 'circle', 'rect', 'line', 'text', 'tspan', 'defs', 'marker', 'polygon', 'polyline', 'ellipse', 'use', 'foreignObject'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan', 'viewBox', 'width', 'height', 'x', 'y', 'dx', 'dy', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'transform', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'points', 'marker-end', 'marker-start', 'text-anchor', 'dominant-baseline', 'font-family', 'font-size', 'font-weight', 'xmlns', 'xmlns:xlink', 'xlink:href']
+                });
+                
+                document.getElementById('renderedContent').innerHTML = cleanHtml;
+                
+                // 处理 Mermaid 图表
+                setTimeout(() => {
+                    processMermaidDiagrams();
+                    validateResults(testName, content);
+                }, 100);
+                
+            } catch (error) {
+                console.error('渲染错误:', error);
+                document.getElementById('renderedContent').innerHTML = `
+                    <div style="color: #dc3545; padding: 10px; border: 1px solid #dc3545; border-radius: 4px;">
+                        <strong>渲染失败:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function processMermaidDiagrams() {
+            // 查找所有 Mermaid 代码块
+            const mermaidBlocks = document.querySelectorAll('#renderedContent pre code.language-mermaid, #renderedContent pre code[class*="mermaid"]');
+            
+            console.log(`找到 ${mermaidBlocks.length} 个 Mermaid 图表`);
+            
+            if (mermaidBlocks.length === 0) {
+                return;
+            }
+
+            mermaidBlocks.forEach((codeBlock, index) => {
+                const pre = codeBlock.parentElement;
+                const mermaidCode = codeBlock.textContent.trim();
+                
+                if (!mermaidCode) {
+                    console.log(`Mermaid 图表 ${index + 1} 为空，跳过`);
+                    return;
+                }
+
+                console.log(`处理 Mermaid 图表 ${index + 1}: ${mermaidCode.substring(0, 50)}...`);
+
+                // 创建容器
+                const mermaidContainer = document.createElement('div');
+                mermaidContainer.className = 'mermaid-container';
+
+                const mermaidDiv = document.createElement('div');
+                const diagramId = `mermaid-diagram-test-${Date.now()}-${index}`;
+                mermaidDiv.id = diagramId;
+                mermaidDiv.className = 'mermaid';
+
+                // 渲染 Mermaid 图表
+                mermaid.render(diagramId + '-svg', mermaidCode).then(result => {
+                    if (result && result.svg) {
+                        mermaidDiv.innerHTML = result.svg;
+                        console.log(`Mermaid 图表 ${index + 1} 渲染成功`);
+                    } else {
+                        throw new Error('渲染结果为空');
+                    }
+                }).catch(error => {
+                    console.error(`Mermaid 图表 ${index + 1} 渲染失败:`, error);
+                    mermaidDiv.innerHTML = `
+                        <div style="color: #d73a49; padding: 10px; font-size: 14px;">
+                            <strong>Mermaid 图表渲染失败:</strong><br>
+                            ${escapeHtml(error.message)}<br>
+                            <details style="margin-top: 10px;">
+                                <summary style="cursor: pointer;">查看原始代码</summary>
+                                <pre style="background: #f1f1f1; padding: 10px; margin-top: 5px; text-align: left; white-space: pre-wrap;">${escapeHtml(mermaidCode)}</pre>
+                            </details>
+                        </div>
+                    `;
+                });
+
+                // 添加标题
+                const title = document.createElement('div');
+                title.style.cssText = `
+                    font-size: 14px;
+                    color: #586069;
+                    margin-bottom: 10px;
+                    font-weight: 500;
+                `;
+                title.textContent = `📊 Mermaid 图表 ${index + 1}`;
+
+                mermaidContainer.appendChild(title);
+                mermaidContainer.appendChild(mermaidDiv);
+
+                // 替换原来的 pre 元素
+                pre.parentNode.replaceChild(mermaidContainer, pre);
+            });
+        }
+
+        function validateResults(testName, content) {
+            setTimeout(() => {
+                const hasMermaidContainers = document.querySelectorAll('#renderedContent .mermaid-container').length > 0;
+                const hasRenderedSVG = document.querySelectorAll('#renderedContent .mermaid-container svg').length > 0;
+                const hasTable = document.querySelectorAll('#renderedContent table').length > 0;
+                const hasHeaders = document.querySelectorAll('#renderedContent h1, #renderedContent h2, #renderedContent h3').length > 0;
+                
+                const results = `
+                    <h4>🔍 ${testName} 验证结果:</h4>
+                    <p><strong>Mermaid 容器:</strong> 
+                        ${hasMermaidContainers ? '<span class="success">✅ 找到</span>' : '<span class="error">❌ 未找到</span>'}
+                    </p>
+                    <p><strong>SVG 图表:</strong> 
+                        ${hasRenderedSVG ? '<span class="success">✅ 渲染成功</span>' : '<span class="error">❌ 渲染失败</span>'}
+                    </p>
+                    <p><strong>表格渲染:</strong> 
+                        ${hasTable ? '<span class="success">✅ 正常</span>' : (content.includes('|') ? '<span class="error">❌ 失败</span>' : '🚫 无表格')}
+                    </p>
+                    <p><strong>标题渲染:</strong> 
+                        ${hasHeaders ? '<span class="success">✅ 正常</span>' : '<span class="error">❌ 失败</span>'}
+                    </p>
+                    
+                    <h5>📊 总体评估:</h5>
+                    <p>${hasRenderedSVG ? 
+                        '<span class="success">🎉 Mermaid 图表渲染成功！功能正常工作</span>' : 
+                        '<span class="error">⚠️ Mermaid 图表渲染失败，需要进一步调试</span>'}</p>
+                `;
+                
+                document.getElementById('validationResults').innerHTML = results;
+                
+                console.log(`${testName} 验证完成:`, {
+                    hasMermaidContainers,
+                    hasRenderedSVG,
+                    hasTable,
+                    hasHeaders
+                });
+            }, 2000); // 等待 Mermaid 渲染完成
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Mermaid 测试页面加载完成');
+            console.log('Mermaid 版本:', typeof mermaid !== 'undefined' ? 'loaded' : 'not loaded');
+            console.log('Markdown-it 版本:', typeof markdownit !== 'undefined' ? 'loaded' : 'not loaded');
+            console.log('DOMPurify 版本:', typeof DOMPurify !== 'undefined' ? 'loaded' : 'not loaded');
+        });
+    </script>
+</body>
+</html>

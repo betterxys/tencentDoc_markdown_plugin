@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试文本清理修复</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .error { border-left-color: red; }
+        .success { border-left-color: green; }
+        .warning { border-left-color: orange; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; font-size: 12px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .diff { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>测试文本清理修复效果</h1>
+    
+    <div class="test-section">
+        <h2>问题演示：插件提取的文本vs原始文本</h2>
+        <div class="diff">
+            <strong>发现的差异：</strong>插件提取的文本在每个表格行后面都多了一个空行，导致markdown-it无法正确解析表格。
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>文本清理功能测试</h2>
+        <button onclick="testTextCleanup()">测试文本清理</button>
+        <div id="cleanup-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>表格渲染对比测试</h2>
+        <button onclick="testTableRendering()">测试表格渲染</button>
+        <div id="rendering-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>修复效果展示</h2>
+        <div id="fixed-render"></div>
+    </div>
+
+    <!-- 加载库文件 -->
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+
+    <script>
+        // 模拟插件提取的有问题的文本（有多余空行）
+        const problematicText = `### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+
+|----------|------------------|-------------------|-------------|
+
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+#### **2. 行业专属附加险**
+
+| **行业**   | **附加险种**                | **触发条件**                          | **案例参考** |
+
+|------------|----------------------------|---------------------------------------|-------------|
+
+| **化工**    | 工艺参数篡改责任险          | 因机器人传输数据被篡改引发生产事故      | 某炼油厂赔付1200万 |
+
+| **电力**    | 新能源场站脱网损失险        | 风电场/光伏电站因攻击脱网导致的发电补偿 | 山东共保体覆盖光伏电站 |`;
+
+        // 正确的原始文本（无多余空行）
+        const correctText = `### ⚙️ **一、行业风险特性与保险需求**
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+#### **2. 行业专属附加险**
+| **行业**   | **附加险种**                | **触发条件**                          | **案例参考** |
+|------------|----------------------------|---------------------------------------|-------------|
+| **化工**    | 工艺参数篡改责任险          | 因机器人传输数据被篡改引发生产事故      | 某炼油厂赔付1200万 |
+| **电力**    | 新能源场站脱网损失险        | 风电场/光伏电站因攻击脱网导致的发电补偿 | 山东共保体覆盖光伏电站 |`;
+
+        // 复制插件的文本清理函数（增强版）
+        function cleanTextContent(text) {
+            if (!text || typeof text !== 'string') return '';
+            
+            return text
+                .replace(/\n\s*\n\s*\n/g, '\n\n')  // 将连续3个以上换行替换为2个
+                .replace(/^\s+|\s+$/g, '')          // 移除开头和结尾空白
+                .replace(/[ \t]+$/gm, '')           // 移除每行末尾的空格和制表符
+                .replace(/(\|.*\|)\n\s*\n(?=\|)/g, '$1\n');  // 专门处理表格行间的多余空行
+        }
+
+        function testTextCleanup() {
+            const result = document.getElementById('cleanup-result');
+            
+            console.log('=== 文本清理测试 ===');
+            const cleanedText = cleanTextContent(problematicText);
+            
+            // 比较行数
+            const originalLines = problematicText.split('\n').length;
+            const cleanedLines = cleanedText.split('\n').length;
+            const correctLines = correctText.split('\n').length;
+            
+            // 检查是否相同
+            const isMatching = cleanedText.trim() === correctText.trim();
+            
+            result.innerHTML = `
+                <strong>文本清理结果:</strong><br>
+                有问题的文本行数: ${originalLines}<br>
+                清理后的文本行数: ${cleanedLines}<br>
+                正确文本行数: ${correctLines}<br>
+                <br>
+                <strong>修复状态:</strong> ${isMatching ? '✅ 完全匹配!' : '❌ 仍有差异'}<br>
+                <br>
+                <strong>清理后的文本:</strong><br>
+                <pre>${cleanedText}</pre>
+                <br>
+                <strong>对比分析:</strong><br>
+                - 清理前表格有多余空行: ${/\|\n\s*\n\|/.test(problematicText) ? '✅ 是' : '❌ 否'}<br>
+                - 清理后仍有多余空行: ${/\|\n\s*\n\|/.test(cleanedText) ? '❌ 是' : '✅ 否'}
+            `;
+            
+            result.className = isMatching ? 'result success' : 'result warning';
+        }
+
+        function testTableRendering() {
+            const result = document.getElementById('rendering-result');
+            const fixedRender = document.getElementById('fixed-render');
+            
+            try {
+                if (typeof markdownit === 'undefined') {
+                    result.innerHTML = '<span style="color: red;">❌ markdown-it 不可用</span>';
+                    result.className = 'result error';
+                    return;
+                }
+                
+                const md = markdownit({ html: false, breaks: false, linkify: true, typographer: true });
+                
+                // 测试有问题的文本
+                const problematicRendered = md.render(problematicText);
+                const problematicHasTable = /<table/.test(problematicRendered);
+                
+                // 测试清理后的文本
+                const cleanedText = cleanTextContent(problematicText);
+                const cleanedRendered = md.render(cleanedText);
+                const cleanedHasTable = /<table/.test(cleanedRendered);
+                
+                // 测试正确的原始文本
+                const correctRendered = md.render(correctText);
+                const correctHasTable = /<table/.test(correctRendered);
+                
+                console.log('问题文本渲染包含table:', problematicHasTable);
+                console.log('清理后渲染包含table:', cleanedHasTable);
+                console.log('正确文本渲染包含table:', correctHasTable);
+                
+                result.innerHTML = `
+                    <strong>表格渲染测试结果:</strong><br>
+                    有问题的文本渲染包含table: ${problematicHasTable ? '✅' : '❌'}<br>
+                    清理后文本渲染包含table: ${cleanedHasTable ? '✅' : '❌'}<br>
+                    正确原始文本渲染包含table: ${correctHasTable ? '✅' : '❌'}<br>
+                    <br>
+                    <strong>修复效果:</strong> ${cleanedHasTable ? '✅ 修复成功!' : '❌ 仍需改进'}
+                `;
+                
+                result.className = cleanedHasTable ? 'result success' : 'result error';
+                
+                // 显示修复后的渲染效果
+                if (cleanedHasTable) {
+                    fixedRender.innerHTML = `
+                        <h3>✅ 修复后的表格渲染效果:</h3>
+                        ${cleanedRendered}
+                        <br>
+                        <details>
+                            <summary>查看生成的HTML代码</summary>
+                            <pre>${cleanedRendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                        </details>
+                    `;
+                } else {
+                    fixedRender.innerHTML = `
+                        <h3>❌ 表格渲染仍有问题</h3>
+                        <p>清理后的HTML输出:</p>
+                        <pre>${cleanedRendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                    `;
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<span style="color: red;">❌ 渲染错误: ${error.message}</span>`;
+                result.className = 'result error';
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('load', function() {
+            testTextCleanup();
+            setTimeout(() => {
+                testTableRendering();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

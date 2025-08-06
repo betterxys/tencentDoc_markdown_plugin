@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试增强的文本提取策略</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 4px solid #007cba; }
+        .success { border-left-color: green; background: #f0fff0; }
+        .warning { border-left-color: orange; background: #fff8e7; }
+        .error { border-left-color: red; background: #fff0f0; }
+        button { padding: 8px 16px; margin: 5px; background: #007cba; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005a87; }
+        pre { background: #f8f8f8; padding: 10px; overflow-x: auto; border: 1px solid #ddd; font-size: 12px; }
+        .comparison { display: flex; gap: 20px; }
+        .comparison > div { flex: 1; }
+        .dom-simulator { border: 2px solid #007cba; padding: 15px; margin: 10px 0; background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>增强文本提取策略测试</h1>
+    
+    <div class="test-section">
+        <h2>模拟腾讯文档DOM结构</h2>
+        <p>以下是模拟的腾讯文档DOM结构，包含可能导致文本污染的各种情况：</p>
+        
+        <!-- 模拟公式栏 - 包含input.value（最纯净的数据源） -->
+        <div class="dom-simulator">
+            <h3>情况1: 公式栏带input.value</h3>
+            <div class="formula-bar">
+                <div class="formula-input">
+                    <input type="text" value="| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |">
+                    <div>| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |</div>
+                    <div></div>
+                    <div>|----------|------------------|-------------------|-------------|</div>
+                    <div></div>
+                    <div>| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |</div>
+                    <div></div>
+                    <div>| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 模拟只有DOM结构，没有input.value -->
+        <div class="dom-simulator">
+            <h3>情况2: 只有DOM结构（有污染）</h3>
+            <div class="ae-formula-input" id="dom-only-container">
+                <div>| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |</div>
+                <div></div>
+                <div>|----------|------------------|-------------------|-------------|</div>
+                <div></div>
+                <div>| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |</div>
+                <div></div>
+                <div>| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |</div>
+            </div>
+        </div>
+        
+        <!-- 模拟包含data属性的情况 -->
+        <div class="dom-simulator">
+            <h3>情况3: 包含data-value属性</h3>
+            <div class="table-input-stage" 
+                 data-value="| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |">
+                <span>DOM显示的内容（可能有格式化问题）</span>
+                <br>
+                <span>| **行业** | **核心风险场景** |</span>
+                <br><br>
+                <span>|----------|------------------|</span>
+            </div>
+        </div>
+        
+        <!-- 模拟全局数据对象 -->
+        <div class="dom-simulator">
+            <h3>情况4: 全局数据对象模拟</h3>
+            <p>模拟window.basicClientVars对象（在JavaScript中设置）</p>
+            <pre id="global-data-display">等待JavaScript设置全局数据...</pre>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>提取策略测试</h2>
+        <button onclick="testAllStrategies()">测试所有提取策略</button>
+        <button onclick="compareResults()">对比提取结果</button>
+        <div id="strategy-results" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>对比分析</h2>
+        <div class="comparison">
+            <div>
+                <h3>原始正确文本</h3>
+                <pre id="original-text">| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |</pre>
+            </div>
+            <div>
+                <h3>最佳提取结果</h3>
+                <pre id="best-extraction-result">点击测试按钮查看结果</pre>
+            </div>
+        </div>
+        <div id="comparison-analysis" class="result"></div>
+    </div>
+    
+    <!-- 加载增强提取策略 -->
+    <script src="enhanced_extraction_strategy.js"></script>
+    
+    <script>
+        // 正确的原始文本（基准）
+        const originalCorrectText = `| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统遭勒索攻击 | 覆盖停产损失 | 《工业控制系统指南》 |
+| **电力行业** | 电网监控系统被入侵 | 赔偿电网瘫痪罚款 | 《电力可靠性管理办法》 |`;
+        
+        // 模拟腾讯文档的全局数据对象
+        window.basicClientVars = {
+            padData: {
+                currentCell: {
+                    content: originalCorrectText,
+                    value: originalCorrectText
+                },
+                selectedCell: {
+                    content: originalCorrectText
+                }
+            },
+            cellData: {
+                content: originalCorrectText,
+                value: originalCorrectText
+            },
+            formulaBar: {
+                content: originalCorrectText,
+                value: originalCorrectText
+            }
+        };
+        
+        // 显示全局数据
+        document.getElementById('global-data-display').textContent = 
+            JSON.stringify(window.basicClientVars, null, 2);
+        
+        function testAllStrategies() {
+            const results = document.getElementById('strategy-results');
+            let html = '<h3>各提取策略测试结果:</h3>';
+            
+            try {
+                // 测试策略1: 数据模型
+                console.log('=== 测试策略1: 数据模型 ===');
+                const dataModelResult = EnhancedTextExtractor.extractFromDataModel();
+                html += `<div><strong>策略1 - 数据模型:</strong> ${dataModelResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (dataModelResult) {
+                    html += `<pre>${dataModelResult.substring(0, 100)}...</pre>`;
+                }
+                
+                // 测试策略2: Input Value
+                console.log('=== 测试策略2: Input Value ===');
+                const inputValueResult = EnhancedTextExtractor.extractFromInputValue();
+                html += `<div><strong>策略2 - Input Value:</strong> ${inputValueResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (inputValueResult) {
+                    html += `<pre>${inputValueResult.substring(0, 100)}...</pre>`;
+                }
+                
+                // 测试策略3: Data属性
+                console.log('=== 测试策略3: Data属性 ===');
+                const dataAttrResult = EnhancedTextExtractor.extractFromDataAttributes();
+                html += `<div><strong>策略3 - Data属性:</strong> ${dataAttrResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (dataAttrResult) {
+                    html += `<pre>${dataAttrResult.substring(0, 100)}...</pre>`;
+                }
+                
+                // 测试策略4: TextContent
+                console.log('=== 测试策略4: TextContent ===');
+                const textContentResult = EnhancedTextExtractor.extractFromTextContent();
+                html += `<div><strong>策略4 - TextContent:</strong> ${textContentResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (textContentResult) {
+                    html += `<pre>${textContentResult.substring(0, 100)}...</pre>`;
+                }
+                
+                // 测试策略5: DOM清理
+                console.log('=== 测试策略5: DOM清理 ===');
+                const domCleanResult = EnhancedTextExtractor.extractFromCleanDOM();
+                html += `<div><strong>策略5 - DOM清理:</strong> ${domCleanResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (domCleanResult) {
+                    html += `<pre>${domCleanResult.substring(0, 100)}...</pre>`;
+                }
+                
+                // 测试综合策略
+                console.log('=== 测试综合策略 ===');
+                const enhancedResult = EnhancedTextExtractor.extractPureText();
+                html += `<div><strong>✨ 综合策略:</strong> ${enhancedResult ? '✅ 成功' : '❌ 失败'}</div>`;
+                if (enhancedResult) {
+                    html += `<pre>${enhancedResult.substring(0, 200)}...</pre>`;
+                    
+                    // 存储最佳结果
+                    document.getElementById('best-extraction-result').textContent = enhancedResult;
+                }
+                
+            } catch (error) {
+                html += `<div class="error">测试过程中出错: ${error.message}</div>`;
+            }
+            
+            results.innerHTML = html;
+        }
+        
+        function compareResults() {
+            const analysisDiv = document.getElementById('comparison-analysis');
+            const bestResult = document.getElementById('best-extraction-result').textContent;
+            
+            if (bestResult === '点击测试按钮查看结果') {
+                analysisDiv.innerHTML = '<div class="warning">请先运行提取策略测试</div>';
+                return;
+            }
+            
+            // 比较文本
+            const isExactMatch = bestResult.trim() === originalCorrectText.trim();
+            const hasExtraNewlines = /\|\n\s*\n\|/.test(bestResult);
+            const lengthDiff = bestResult.length - originalCorrectText.length;
+            
+            let analysis = '<h3>文本一致性分析:</h3>';
+            analysis += `<div><strong>完全匹配:</strong> ${isExactMatch ? '✅ 是' : '❌ 否'}</div>`;
+            analysis += `<div><strong>包含多余空行:</strong> ${hasExtraNewlines ? '❌ 是' : '✅ 否'}</div>`;
+            analysis += `<div><strong>长度差异:</strong> ${lengthDiff} 个字符</div>`;
+            
+            if (isExactMatch) {
+                analysis += '<div class="success"><strong>🎉 完美！</strong> 提取的文本与原始文本完全一致，事前提取策略成功！</div>';
+            } else {
+                analysis += '<div class="warning"><strong>⚠️ 仍有差异</strong> 需要进一步优化提取策略</div>';
+                
+                // 详细差异分析
+                analysis += '<h4>详细差异:</h4>';
+                const originalLines = originalCorrectText.split('\n');
+                const extractedLines = bestResult.split('\n');
+                
+                analysis += `<div>原始行数: ${originalLines.length}, 提取行数: ${extractedLines.length}</div>`;
+                
+                // 显示前几行的对比
+                for (let i = 0; i < Math.max(originalLines.length, extractedLines.length) && i < 5; i++) {
+                    const orig = originalLines[i] || '(空行)';
+                    const extr = extractedLines[i] || '(空行)';
+                    const matches = orig === extr;
+                    
+                    analysis += `<div>行${i+1}: ${matches ? '✅' : '❌'} ${matches ? '匹配' : '不匹配'}</div>`;
+                    if (!matches) {
+                        analysis += `<div style="margin-left: 20px;">原始: "${orig}"</div>`;
+                        analysis += `<div style="margin-left: 20px;">提取: "${extr}"</div>`;
+                    }
+                }
+            }
+            
+            analysisDiv.innerHTML = analysis;
+            analysisDiv.className = isExactMatch ? 'result success' : 'result warning';
+        }
+        
+        // 页面加载时自动运行测试
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                testAllStrategies();
+                setTimeout(() => {
+                    compareResults();
+                }, 1000);
+            }, 500);
+        });
+    </script>
+</body>
+</html>
