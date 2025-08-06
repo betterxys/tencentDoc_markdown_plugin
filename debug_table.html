@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Table Debugging</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+</head>
+<body>
+    <h1>Table Debugging Test</h1>
+    
+    <h2>Test Markdown Input:</h2>
+    <pre id="input"></pre>
+    
+    <h2>Raw marked.js Output:</h2>
+    <pre id="raw-output"></pre>
+    
+    <h2>DOMPurify Cleaned Output:</h2>
+    <pre id="clean-output"></pre>
+    
+    <h2>Final Rendered Result:</h2>
+    <div id="rendered" style="border: 1px solid #ccc; padding: 20px; margin: 20px 0;"></div>
+    
+    <script>
+        // Test table markdown
+        const testMarkdown = `| 问题 | 解决方案 | 推荐灯具 |
+|------|----------|----------|
+| **地面反光** | 低照度泛光+间接照明 | 悦上暗藏灯带 + U7筒灯（磨砂透镜） |
+| **墙面眩光** | 洗墙灯+蜂窝防眩网/哑光反光杯 | 水墨轨道灯 + 光力导轨灯 |`;
+
+        document.getElementById('input').textContent = testMarkdown;
+        
+        try {
+            // Test marked.js parsing
+            console.log('marked version:', marked.version || 'unknown');
+            console.log('marked object:', marked);
+            
+            // Test with different configurations
+            const rawHtml1 = marked(testMarkdown, {
+                gfm: true,
+                breaks: false,
+                pedantic: false,
+                sanitize: false,
+                smartLists: true,
+                smartypants: false
+            });
+            
+            console.log('Raw HTML output:', rawHtml1);
+            document.getElementById('raw-output').textContent = rawHtml1;
+            
+            // Test DOMPurify
+            const cleanHtml = DOMPurify.sanitize(rawHtml1, {
+                ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+            });
+            
+            console.log('Clean HTML output:', cleanHtml);
+            document.getElementById('clean-output').textContent = cleanHtml;
+            
+            // Render final result
+            document.getElementById('rendered').innerHTML = cleanHtml;
+            
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('raw-output').textContent = 'Error: ' + error.message;
+        }
+    </script>
+    
+    <style>
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #ddd;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        /* Table styles */
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th {
+            background-color: #f6f8fa !important;
+            font-weight: 600 !important;
+        }
+    </style>
+</body>
+</html>

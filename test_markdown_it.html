@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>markdown-it 表格渲染测试</title>
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .test-header {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            border: 2px solid #007bff;
+            padding: 25px;
+            border-radius: 10px;
+            background-color: #f8f9fa;
+        }
+        
+        .result-container {
+            border: 2px solid #28a745;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            background-color: white;
+            min-height: 200px;
+        }
+        
+        .debug-section {
+            background: #343a40;
+            color: #00ff41;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .stat-card {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* 增强的表格样式 */
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 20px 0 !important;
+            border: 2px solid #2196f3 !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+        }
+        
+        th {
+            padding: 15px !important;
+            text-align: left !important;
+            background: linear-gradient(135deg, #2196f3, #1976d2) !important;
+            color: white !important;
+            font-weight: 600 !important;
+            border: 1px solid #1976d2 !important;
+        }
+        
+        td {
+            padding: 12px 15px !important;
+            border: 1px solid #e0e0e0 !important;
+            background-color: #ffffff !important;
+            vertical-align: top !important;
+        }
+        
+        tr:nth-child(even) td {
+            background-color: #f5f5f5 !important;
+        }
+        
+        tr:hover td {
+            background-color: #e3f2fd !important;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        
+        .info {
+            color: #17a2b8;
+            font-weight: bold;
+        }
+        
+        .custom-input {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 2px dashed #28a745;
+            border-radius: 8px;
+            background-color: #f8fff4;
+        }
+        
+        .custom-textarea {
+            width: 100%;
+            height: 200px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="test-header">
+            <h1>🚀 markdown-it 表格渲染测试</h1>
+            <p>测试新的 markdown-it 解析器对表格的支持</p>
+        </div>
+        
+        <div class="test-section">
+            <h2>📋 测试选项</h2>
+            <button class="btn" onclick="testFailingContent()">🧪 测试失败内容</button>
+            <button class="btn" onclick="testSimpleTable()">📊 测试简单表格</button>
+            <button class="btn" onclick="testComplexTable()">🔧 测试复杂表格</button>
+            <button class="btn" onclick="toggleCustomInput()">✏️ 自定义测试</button>
+            
+            <div id="custom-input-section" class="custom-input" style="display: none;">
+                <h3 style="margin-top: 0; color: #28a745;">✏️ 输入自定义测试内容</h3>
+                <textarea id="custom-content" placeholder="在这里粘贴您要测试的Markdown内容..." class="custom-textarea"></textarea>
+                <div style="margin-top: 10px;">
+                    <button class="btn" onclick="testCustomContent()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">🧪 执行自定义测试</button>
+                    <button class="btn" onclick="toggleCustomInput()" style="background: #6c757d;">❌ 关闭</button>
+                </div>
+            </div>
+            
+            <div class="stats-grid" id="stats-grid" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-success">-</div>
+                    <div class="stat-label">渲染成功</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-tables">-</div>
+                    <div class="stat-label">表格数量</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-rows">-</div>
+                    <div class="stat-label">表格行数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-cells">-</div>
+                    <div class="stat-label">表格单元格</div>
+                </div>
+            </div>
+            
+            <div class="result-container" id="result-container">
+                <p style="text-align: center; color: #666;">选择上面的测试按钮开始测试</p>
+            </div>
+            
+            <details>
+                <summary style="cursor: pointer; font-weight: bold; color: #1976d2;">📊 查看详细调试信息</summary>
+                <div class="debug-section" id="debug-log"></div>
+            </details>
+        </div>
+    </div>
+    
+    <script>
+        // 初始化markdown-it
+        let md;
+        
+        window.onload = function() {
+            try {
+                md = markdownit({
+                    html: false,
+                    xhtmlOut: false,
+                    breaks: false,
+                    langPrefix: 'language-',
+                    linkify: true,
+                    typographer: true,
+                    quotes: '""''',
+                });
+                
+                log('✅ markdown-it 初始化成功');
+                log(`📚 markdown-it 版本: ${markdownit.version || 'unknown'}`);
+                
+            } catch (error) {
+                log(`❌ markdown-it 初始化失败: ${error.message}`, 'error');
+            }
+        };
+        
+        function log(message, level = 'info') {
+            const debugDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const icons = {
+                'success': '✅',
+                'error': '❌', 
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            };
+            const icon = icons[level] || 'ℹ️';
+            debugDiv.textContent += `[${timestamp}] ${icon} ${message}\n`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('debug-log').textContent = '';
+        }
+        
+        function updateStats(success, tablesCount, rowsCount, cellsCount) {
+            document.getElementById('stat-success').textContent = success ? '✅' : '❌';
+            document.getElementById('stat-success').className = success ? 'stat-value success' : 'stat-value error';
+            
+            document.getElementById('stat-tables').textContent = tablesCount;
+            document.getElementById('stat-rows').textContent = rowsCount;
+            document.getElementById('stat-cells').textContent = cellsCount;
+            
+            document.getElementById('stats-grid').style.display = 'grid';
+        }
+        
+        function toggleCustomInput() {
+            const section = document.getElementById('custom-input-section');
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+            } else {
+                section.style.display = 'none';
+            }
+        }
+        
+        function renderMarkdown(content, testName) {
+            clearLog();
+            log(`🚀 开始测试: ${testName}`);
+            log(`📝 内容长度: ${content.length} 字符`);
+            
+            try {
+                // 使用markdown-it渲染
+                const html = md.render(content);
+                log('✅ markdown-it 渲染成功', 'success');
+                log(`📄 生成HTML长度: ${html.length} 字符`);
+                log(`🔍 包含<table>标签: ${/<table/.test(html)}`, /<table/.test(html) ? 'success' : 'error');
+                
+                // 使用DOMPurify清理
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                log(`🧹 DOMPurify清理后长度: ${cleanHtml.length} 字符`);
+                log(`🔍 最终包含<table>标签: ${/<table/.test(cleanHtml)}`, /<table/.test(cleanHtml) ? 'success' : 'error');
+                
+                // 渲染到页面
+                document.getElementById('result-container').innerHTML = cleanHtml;
+                
+                // 验证渲染结果
+                const tables = document.getElementById('result-container').querySelectorAll('table');
+                const totalRows = document.getElementById('result-container').querySelectorAll('tr');
+                const totalCells = document.getElementById('result-container').querySelectorAll('th, td');
+                
+                log(`📊 实际渲染的表格数量: ${tables.length}`, tables.length > 0 ? 'success' : 'error');
+                log(`📋 总行数: ${totalRows.length}`);
+                log(`🔢 总单元格数: ${totalCells.length}`);
+                
+                if (tables.length > 0) {
+                    tables.forEach((table, i) => {
+                        const headers = table.querySelectorAll('th');
+                        const cells = table.querySelectorAll('td');
+                        const rows = table.querySelectorAll('tr');
+                        log(`📋 表格${i+1}: ${rows.length}行, ${headers.length}个表头, ${cells.length}个数据单元格`, 'success');
+                    });
+                }
+                
+                // 更新统计数据
+                updateStats(tables.length > 0, tables.length, totalRows.length, totalCells.length);
+                
+                if (tables.length > 0) {
+                    log('🎉 测试成功！表格已正确渲染', 'success');
+                } else {
+                    log('❌ 测试失败！表格未能渲染', 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ 渲染错误: ${error.message}`, 'error');
+                document.getElementById('result-container').innerHTML = 
+                    `<div style="color: red; font-weight: bold; text-align: center; padding: 40px;">
+                        ❌ 渲染失败: ${error.message}
+                    </div>`;
+                updateStats(false, 0, 0, 0);
+            }
+            
+            log('📝 测试完成');
+        }
+        
+        function testFailingContent() {
+            const failingContent = `### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+
+|----------|------------------|-------------------|-------------|
+
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断；工艺参数泄露引发安全事故；环保数据篡改招致监管罚款 | 覆盖停产损失（日均产值×停机天数）+ 数据恢复费用 + 第三方责任赔偿（如环境污染） | 《工业控制系统信息安全防护指南》[citation:7]；《网络安全法》[citation:7] |
+
+| **电力行业** | 电网监控系统被入侵引发大面积停电；新能源电站遭DDoS攻击致脱网；用户数据泄露面临能监罚款 | 赔偿电网瘫痪罚款（单次最高500万） + 发电损失（按上网电价计算） + 合规罚金 | 《电力可靠性管理办法》要求强化监控系统防护[citation:9] |`;
+            
+            renderMarkdown(failingContent, '用户失败内容（带空行表格）');
+        }
+        
+        function testSimpleTable() {
+            const simpleContent = `# 简单表格测试
+
+| A | B | C |
+|---|---|---|
+| 1 | 2 | 3 |
+| 4 | 5 | 6 |`;
+            
+            renderMarkdown(simpleContent, '简单表格');
+        }
+        
+        function testComplexTable() {
+            const complexContent = `#### **2. 行业专属附加险**
+
+| **行业**   | **附加险种**                | **触发条件**                          | **案例参考** |
+|------------|----------------------------|---------------------------------------|-------------|
+| **化工**    | 工艺参数篡改责任险          | 因机器人传输数据被篡改引发生产事故      | 某炼油厂因控制系统遭入侵致泄漏，赔付1200万[citation:8] |
+| **电力**    | 新能源场站脱网损失险        | 风电场/光伏电站因攻击脱网导致的发电补偿 | 山东共保体覆盖光伏电站停机损失[citation:3] |`;
+            
+            renderMarkdown(complexContent, '复杂表格（无空行）');
+        }
+        
+        function testCustomContent() {
+            const customContent = document.getElementById('custom-content').value.trim();
+            if (!customContent) {
+                alert('请先输入要测试的内容！');
+                return;
+            }
+            
+            renderMarkdown(customContent, '自定义内容');
+        }
+    </script>
+</body>
+</html>

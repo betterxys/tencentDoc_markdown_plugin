@@ -194,13 +194,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   // 从内容脚本接收 Markdown 内容
   if (message.type === 'markdown_content') {
-    const { content } = message;
+    const { content, contentType = 'text' } = message;
     logMessage(`接收到 Markdown 内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`);
     
     // 存储内容到本地存储
     const timestamp = new Date().toLocaleString();
     chrome.storage.local.set({
       lastMarkdownContent: content,
+      contentType: contentType,
       timestamp: timestamp
     }, function() {
       logMessage('内容已保存到存储中');
@@ -216,14 +217,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // 短暂延迟，确保侧边栏有足够时间加载
           setTimeout(() => {
             // 发送内容到侧边栏进行渲染
+            logMessage(`🚀 准备发送内容到侧边栏 (类型: ${contentType}, 长度: ${content.length})`);
             chrome.runtime.sendMessage({
               type: 'render_markdown',
               content: content,
               contentType: contentType,
               timestamp: timestamp,
               accessibilityMode: accessibilityMode
+            }).then(response => {
+              logMessage(`✅ 侧边栏响应: ${JSON.stringify(response)}`);
             }).catch(err => {
-              logMessage(`发送到侧边栏失败: ${err.message}`);
+              logMessage(`❌ 发送到侧边栏失败: ${err.message}`);
             });
           }, 500);
         });

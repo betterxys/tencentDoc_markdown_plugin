@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试真实内容的表格检测</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .debug-log {
+            background: #f5f5f5;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+        
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th {
+            background-color: #f6f8fa !important;
+            font-weight: 600 !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>测试真实内容的表格检测与渲染</h1>
+    
+    <div class="test-section">
+        <h2>测试内容类型1：包含表格的真实内容</h2>
+        <button onclick="testRealContent1()">测试网安险内容</button>
+        <div id="result1"></div>
+        <div id="debug1" class="debug-log"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试内容类型2：不包含表格的内容</h2>
+        <button onclick="testRealContent2()">测试普通文本</button>
+        <div id="result2"></div>
+        <div id="debug2" class="debug-log"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试内容类型3：标准表格</h2>
+        <button onclick="testStandardTable()">测试标准表格</button>
+        <div id="result3"></div>
+        <div id="debug3" class="debug-log"></div>
+    </div>
+    
+    <script>
+        function log(sectionId, message) {
+            const debugDiv = document.getElementById(sectionId);
+            debugDiv.innerHTML += '[' + new Date().toLocaleTimeString() + '] ' + message + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        function clearLog(sectionId) {
+            document.getElementById(sectionId).innerHTML = '';
+        }
+        
+        // 改进的表格检测函数（与sidepanel.js保持一致）
+        function detectTable(content) {
+            const hasTableNew = /\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*/.test(content);
+            const hasTableOld = /\|.*\|/.test(content);
+            
+            return {
+                newDetection: hasTableNew,
+                oldDetection: hasTableOld,
+                allPipes: content.match(/\|[^|\n]*\|/g),
+                tables: content.match(/\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/g)
+            };
+        }
+        
+        function renderContent(content, sectionId) {
+            clearLog('debug' + sectionId);
+            log('debug' + sectionId, `开始处理内容，长度: ${content.length}`);
+            
+            const detection = detectTable(content);
+            log('debug' + sectionId, `新检测逻辑: ${detection.newDetection}`);
+            log('debug' + sectionId, `旧检测逻辑: ${detection.oldDetection}`);
+            
+            if (detection.allPipes) {
+                log('debug' + sectionId, `找到 ${detection.allPipes.length} 个竖线模式`);
+                detection.allPipes.slice(0, 3).forEach((pipe, i) => {
+                    log('debug' + sectionId, `  ${i+1}: ${pipe}`);
+                });
+            }
+            
+            if (detection.tables) {
+                log('debug' + sectionId, `找到 ${detection.tables.length} 个真实表格`);
+                detection.tables.forEach((table, i) => {
+                    log('debug' + sectionId, `表格 ${i+1}: ${table.substring(0, 100)}...`);
+                });
+            }
+            
+            try {
+                let html;
+                if (typeof marked.parse === 'function') {
+                    html = marked.parse(content, { gfm: true });
+                    log('debug' + sectionId, '使用 marked.parse() 成功');
+                } else {
+                    html = marked(content, { gfm: true });
+                    log('debug' + sectionId, '使用 marked() 成功');
+                }
+                
+                log('debug' + sectionId, `生成HTML长度: ${html.length}`);
+                log('debug' + sectionId, `包含table标签: ${/<table/.test(html)}`);
+                
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                log('debug' + sectionId, `清理后HTML长度: ${cleanHtml.length}`);
+                log('debug' + sectionId, `最终包含table标签: ${/<table/.test(cleanHtml)}`);
+                
+                document.getElementById('result' + sectionId).innerHTML = cleanHtml;
+                
+            } catch (error) {
+                log('debug' + sectionId, `错误: ${error.message}`);
+                document.getElementById('result' + sectionId).innerHTML = `<div style="color: red;">渲染失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testRealContent1() {
+            const content = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+这是保险+科技+服务的模式。`;
+            
+            renderContent(content, '1');
+        }
+        
+        function testRealContent2() {
+            const content = `这是一段普通文本，包含一些竖线字符，如保险+科技+服务模式，A|B这样的内容，但没有真正的表格结构。
+
+用户需要了解具体的落地方案，而非理论框架。需要结合化工电力行业的特殊风险、天创产品技术特性、网安险运作机制三个维度来设计。
+
+这种内容不应该被误判为包含表格。`;
+            
+            renderContent(content, '2');
+        }
+        
+        function testStandardTable() {
+            const content = `# 标准表格测试
+
+| 问题 | 解决方案 | 推荐灯具 |
+|------|----------|----------|
+| **地面反光** | 低照度泛光+间接照明 | 悦上暗藏灯带 + U7筒灯（磨砂透镜） |
+| **墙面眩光** | 洗墙灯+蜂窝防眩网/哑光反光杯 | 水墨轨道灯 + 光力导轨灯 |
+
+## 简单表格
+
+| A | B |
+|---|---|
+| 1 | 2 |`;
+            
+            renderContent(content, '3');
+        }
+    </script>
+</body>
+</html>

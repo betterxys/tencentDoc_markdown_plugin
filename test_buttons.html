@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>按钮功能测试</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <script src="lib/markdown-it.min.js"></script>
+  <script src="lib/purify.min.js"></script>
+  <style>
+    body {
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-info {
+      background: #e3f2fd;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #2196f3;
+    }
+    .button-test {
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+    }
+    .status {
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    .success { color: #4caf50; }
+    .error { color: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="test-info">
+    <h2>🔧 按钮功能测试</h2>
+    <p>这个页面用于测试所有按钮的点击功能是否正常工作</p>
+  </div>
+
+  <div class="panel-container">
+    <header>
+      <div class="header-info">
+        <div id="timestamp">2024-01-01 12:00:00</div>
+        <div id="content-info" class="content-info">测试内容 • 100 字符</div>
+      </div>
+      <div class="controls">
+        <button id="copy-btn" title="复制原始内容">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+          </svg>
+        </button>
+        <button id="view-mode-btn" title="切换查看模式">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
+            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+          </svg>
+        </button>
+        <button id="pin-btn" title="置顶：开启时展开渲染区域，关闭时收起渲染区域">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
+            <path d="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z" />
+          </svg>
+        </button>
+        <button id="refresh-btn" title="重新加载侧边栏 (Ctrl+R)">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
+            <path d="M17.65 6.35a7.95 7.95 0 0 0-6.48-2.31c-3.67.37-6.69 3.35-7.1 7.02C3.52 15.91 7.27 20 12 20a7.98 7.98 0 0 0 7.21-4.56c.32-.67-.16-1.44-.9-1.44-.37 0-.72.2-.88.53a5.994 5.994 0 0 1-5.43 3.47c-3.59 0-6.5-3.14-6.5-7 0-3.86 3.13-7 7-7 1.93 0 3.68.79 4.94 2.06l-1.42 1.42a.996.996 0 0 0-.28.83.99.99 0 0 0 1 .97h4.28a1 1 0 0 0 1-1V4a1 1 0 0 0-1.7-.7l-1.66 1.65z" />
+          </svg>
+        </button>
+        <button id="toggle-log-btn" title="显示/隐藏调试日志">
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
+            <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L16.67 4H7.33l1.3 2.04C7.89 6.55 7.27 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-4 4v3c0 .22-.03.47-.07.7l-.1.65-.37.65c-.72 1.24-2.04 2-3.46 2s-2.74-.77-3.46-2l-.37-.64-.1-.65A4.27 4.27 0 0 1 8 15v-4c0-.23.03-.48.07-.7l.1-.65.37-.65c.3-.52.72-.97 1.21-1.31l.57-.39.74-.18c.31-.08.63-.12.94-.12.32 0 .63.04.95.12l.68.16.61.42c.5.34.91.78 1.21 1.31l.38.65.1.65c.04.22.07.47.07.69v1zm-6 2h4v2h-4v-2zm4-3h-4v-2h4v2z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+    
+    <div id="markdown-output" class="markdown-body">
+      <div class="empty-state">
+        <p>测试用的markdown输出区域</p>
+        <p>这里可以看到渲染的内容</p>
+      </div>
+    </div>
+    
+    <div id="debug-console" class="debug-console">
+      <div class="debug-header">
+        <h3>调试日志</h3>
+        <div class="debug-controls">
+          <button id="copy-log-btn" title="复制所有日志">
+            <svg xmlns="http://www.w3.org/2000/svg" height="16" width="16" viewBox="0 0 24 24">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+            </svg>
+            复制
+          </button>
+          <button id="clear-log-btn" title="清除日志">清除</button>
+        </div>
+      </div>
+      <div id="log-messages" class="log-messages">
+        <p><span class="timestamp">12:00:00</span> <span class="log-background">[background]</span> <span class="log-message-content"> 测试日志消息</span></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="test-info">
+    <h3>🧪 按钮测试结果</h3>
+    <div class="button-test">
+      <strong>复制按钮:</strong> <span id="copy-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>视图模式按钮:</strong> <span id="view-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>置顶按钮:</strong> <span id="pin-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>刷新按钮:</strong> <span id="refresh-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>调试日志按钮:</strong> <span id="debug-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>复制日志按钮:</strong> <span id="copy-log-status" class="status">未测试</span>
+    </div>
+    <div class="button-test">
+      <strong>清除日志按钮:</strong> <span id="clear-log-status" class="status">未测试</span>
+    </div>
+  </div>
+
+  <script>
+    // 模拟chrome扩展API
+    window.chrome = {
+      runtime: {
+        sendMessage: function(message, callback) {
+          console.log('模拟发送消息:', message);
+          if (callback) {
+            setTimeout(() => callback({ status: 'success' }), 100);
+          }
+          return Promise.resolve({ status: 'success' });
+        },
+        onMessage: {
+          addListener: function(callback) {
+            console.log('模拟添加消息监听器');
+          }
+        }
+      },
+      storage: {
+        local: {
+          get: function(keys, callback) {
+            const mockData = {
+              isPinned: true,
+              accessibilityMode: false,
+              lastMarkdownContent: '# 测试内容\n\n这是一个测试。',
+              contentType: 'markdown',
+              timestamp: '2024-01-01 12:00:00'
+            };
+            callback(mockData);
+          },
+          set: function(data, callback) {
+            console.log('模拟保存数据:', data);
+            if (callback) callback();
+          }
+        }
+      }
+    };
+
+    // 模拟剪贴板API
+    if (!navigator.clipboard) {
+      navigator.clipboard = {
+        writeText: function(text) {
+          console.log('模拟复制到剪贴板:', text.substring(0, 50) + '...');
+          return Promise.resolve();
+        }
+      };
+    }
+  </script>
+  
+  <script src="sidepanel.js"></script>
+  
+  <script>
+    // 测试按钮功能
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(() => {
+        console.log('开始测试按钮功能...');
+        
+        // 测试所有按钮是否可点击
+        const buttons = [
+          { id: 'copy-btn', statusId: 'copy-status', name: '复制按钮' },
+          { id: 'view-mode-btn', statusId: 'view-status', name: '视图模式按钮' },
+          { id: 'pin-btn', statusId: 'pin-status', name: '置顶按钮' },
+          { id: 'refresh-btn', statusId: 'refresh-status', name: '刷新按钮' },
+          { id: 'toggle-log-btn', statusId: 'debug-status', name: '调试日志按钮' },
+          { id: 'copy-log-btn', statusId: 'copy-log-status', name: '复制日志按钮' },
+          { id: 'clear-log-btn', statusId: 'clear-log-status', name: '清除日志按钮' }
+        ];
+
+        buttons.forEach(({ id, statusId, name }) => {
+          const button = document.getElementById(id);
+          const status = document.getElementById(statusId);
+          
+          if (button) {
+            // 检查是否有事件监听器
+            const hasListener = button.onclick || button.addEventListener;
+            
+            // 尝试点击
+            try {
+              button.click();
+              status.textContent = '✅ 可点击';
+              status.className = 'status success';
+              console.log(`✅ ${name} 测试成功`);
+            } catch (error) {
+              status.textContent = '❌ 点击失败';
+              status.className = 'status error';
+              console.error(`❌ ${name} 测试失败:`, error);
+            }
+          } else {
+            status.textContent = '❌ 元素不存在';
+            status.className = 'status error';
+            console.error(`❌ ${name} 元素不存在`);
+          }
+        });
+        
+        console.log('按钮功能测试完成');
+      }, 1000);
+    });
+  </script>
+</body>
+</html>

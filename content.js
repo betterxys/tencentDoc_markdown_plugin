@@ -1,6 +1,6 @@
 // 内容脚本 - 负责从腾讯文档中提取 Markdown 内容
 
-const debug = false;
+const debug = true;
 
 // 配置常量
 const CONFIG = {
@@ -642,19 +642,32 @@ const debouncedProcessCell = debounce(processTableCellContent, CONFIG.delays.deb
 // 处理点击事件
 function handleClick(event) {
   // 检查是否在监听状态
-  if (!isListening) return;
+  if (!isListening) {
+    logMessage("点击事件被忽略：插件未在监听状态");
+    return;
+  }
   
   logMessage("检测到点击事件");
   
   try {
     // 获取点击的元素
     const targetElement = event.target;
+    logMessage(`点击目标: ${targetElement.tagName}, 类名: ${targetElement.className}, ID: ${targetElement.id}`);
     
     // 检查是否点击了单元格相关区域
-    const isTableCell = targetElement.closest('.cell-active, .cell-selected, .main-board, .excel-container, .block-board');
+    const cellSelectors = ['.cell-active', '.cell-selected', '.main-board', '.excel-container', '.block-board', '.sheet-cell', '[role="gridcell"]', 'td', 'th'];
+    let isTableCell = null;
+    
+    for (const selector of cellSelectors) {
+      isTableCell = targetElement.closest(selector);
+      if (isTableCell) {
+        logMessage(`检测到点击了表格相关区域: ${selector}`);
+        break;
+      }
+    }
+    
     if (isTableCell) {
-      logMessage("检测到可能点击了表格单元格");
-      
+      logMessage("使用防抖处理表格单元格点击");
       // 使用防抖处理
       debouncedProcessCell();
       return;
@@ -664,11 +677,16 @@ function handleClick(event) {
     const cell = getCellOrTextArea(targetElement);
     if (!cell) {
       logMessage("未能找到有效的单元格或文本区域");
+      logMessage("尝试直接处理表格单元格内容");
+      processTableCellContent();
       return;
     }
     
+    logMessage(`找到有效的单元格: ${cell.tagName}, 类名: ${cell.className}`);
+    
     // 提取文本内容
     const content = extractTextContent(cell);
+    logMessage(`提取到的内容长度: ${content ? content.length : 0}`);
     
     // 处理提取的内容
     processExtractedContent(content);
@@ -704,23 +722,27 @@ function processExtractedContent(content) {
     contentType === 'json' ||
     contentType === 'code' ||
     contentType === 'table' ||
-    cleanedContent.length > 50;
+    cleanedContent.length > 50 ||
+    (contentType === 'text' && cleanedContent.length >= 3); // 处理普通文本内容，最少3个字符
   
   if (shouldProcess) {
     lastProcessedContent = cleanedContent;
     
+    logMessage(`✅ 决定处理内容 (类型: ${contentType}, 长度: ${cleanedContent.length})`);
     logMessage(`处理内容: ${cleanedContent.substring(0, 50)}${cleanedContent.length > 50 ? '...' : ''}`);
     
     // 发送内容到背景脚本
     sendContentToBackground(cleanedContent, contentType);
   } else {
-    logMessage(`跳过处理: 内容类型为 ${contentType}，不符合处理条件`);
+    logMessage(`❌ 跳过处理: 内容类型为 ${contentType}，长度为 ${cleanedContent.length}，不符合处理条件`);
   }
 }
 
 // 发送内容到背景脚本
 function sendContentToBackground(content, contentType) {
   try {
+    logMessage(`🚀 发送内容到背景脚本 (类型: ${contentType}, 长度: ${content.length})`);
+    
     chrome.runtime.sendMessage({
       type: 'markdown_content',
       content: content,
@@ -728,9 +750,9 @@ function sendContentToBackground(content, contentType) {
       timestamp: Date.now()
     }, response => {
       if (response && response.status === 'received') {
-        logMessage("内容已发送到背景脚本");
+        logMessage("✅ 内容已成功发送到背景脚本");
       } else {
-        logMessage("发送内容到背景脚本失败");
+        logMessage("❌ 发送内容到背景脚本失败，响应:", response);
       }
     });
   } catch (error) {
@@ -747,16 +769,34 @@ function processTableCellContent() {
     let content = '';
     
     // 1. 首先尝试从公式栏获取内容
+    logMessage("方法1: 尝试从公式栏获取内容");
     content = extractFormulaBarContent();
+    if (content) {
+      logMessage(`从公式栏获取到内容: ${content.substring(0, 50)}...`);
+    } else {
+      logMessage("公式栏没有内容");
+    }
     
     // 2. 如果未获取到内容，尝试从单元格坐标获取
     if (!content) {
+      logMessage("方法2: 尝试从单元格坐标获取内容");
       content = extractContentByCellCoordinate();
+      if (content) {
+        logMessage(`从单元格坐标获取到内容: ${content.substring(0, 50)}...`);
+      } else {
+        logMessage("单元格坐标方法没有获取到内容");
+      }
     }
     
     // 3. 如果公式栏没有内容，尝试从数据模型获取
     if (!content) {
+      logMessage("方法3: 尝试从数据模型获取内容");
       content = extractCellContentFromDataModel();
+      if (content) {
+        logMessage(`从数据模型获取到内容: ${content.substring(0, 50)}...`);
+      } else {
+        logMessage("数据模型方法没有获取到内容");
+      }
     }
   
   // 4. 如果数据模型也没有内容，尝试从可见单元格获取
@@ -1085,21 +1125,74 @@ function debugCellStructure() {
   }
 }
 
+// 新增：列出当前页面的关键DOM元素
+function logAvailableElements() {
+  logMessage("分析当前页面DOM结构");
+  
+  // 检查常见的表格相关选择器
+  const selectors = [
+    '.excel-container',
+    '.main-board', 
+    '.block-board',
+    '.sheet-cell',
+    '[role="gridcell"]',
+    'td', 'th',
+    '.formula-bar',
+    '.formula-input',
+    '.table-input-stage',
+    '#alloy-rich-text-editor',
+    '.single-selection',
+    '.cell-editor-container',
+    '[contenteditable="true"]'
+  ];
+  
+  selectors.forEach(selector => {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      logMessage(`找到 ${elements.length} 个 "${selector}" 元素`);
+      // 记录前几个元素的详细信息
+      Array.from(elements).slice(0, 3).forEach((el, index) => {
+        logMessage(`  ${selector}[${index}]: ${el.tagName}, class="${el.className}", id="${el.id}"`);
+      });
+    }
+  });
+  
+  // 检查是否有任何表格
+  const tables = document.querySelectorAll('table');
+  logMessage(`页面中共有 ${tables.length} 个 table 元素`);
+  
+  // 检查是否有任何可编辑元素
+  const editables = document.querySelectorAll('[contenteditable="true"]');
+  logMessage(`页面中共有 ${editables.length} 个可编辑元素`);
+}
+
 // 初始化
 function initialize() {
   logMessage("初始化内容脚本");
+  logMessage(`当前URL: ${window.location.href}`);
   
-  // 检查当前 URL 是否是腾讯文档的 sheet 模式
+  // 检查当前 URL 是否是腾讯文档的相关页面
   const currentUrl = window.location.href;
-  const isSheetMode = currentUrl.includes('doc.weixin.qq.com/sheet');
+  const isTencentDoc = 
+    currentUrl.includes('doc.weixin.qq.com') || 
+    currentUrl.includes('docs.qq.com') ||
+    currentUrl.includes('doc.qq.com');
   
-  // 只在腾讯文档的 sheet 模式下启用扩展
-  if (!isSheetMode) {
-    logMessage("当前页面不是腾讯文档 sheet 模式，不启用扩展");
+  // 检查是否是表格模式
+  const isSheetMode = 
+    currentUrl.includes('/sheet') ||
+    currentUrl.includes('excel') ||
+    document.querySelector('.excel-container, .main-board, .block-board');
+  
+  logMessage(`是腾讯文档: ${isTencentDoc}, 是表格模式: ${isSheetMode}`);
+  
+  // 在腾讯文档页面启用扩展（不仅限于sheet模式）
+  if (!isTencentDoc) {
+    logMessage("当前页面不是腾讯文档，不启用扩展");
     return;
   }
   
-  logMessage("检测到腾讯文档 sheet 模式，启用扩展");
+  logMessage(`检测到腾讯文档页面，启用扩展 (表格模式: ${isSheetMode})`);
   
   // 保存事件处理函数引用
   clickHandler = handleClick;
@@ -1138,6 +1231,13 @@ function initialize() {
     // 注入脚本以访问内部API
     injectScriptToAccessInternalAPI();
   });
+  
+  // 立即进行DOM结构分析
+  setTimeout(() => {
+    logMessage("执行延迟DOM结构分析");
+    debugCellStructure();
+    logAvailableElements();
+  }, 2000);
   
   logMessage(`已在 ${window.location.hostname} 启动内容脚本`);
 }
@@ -1224,6 +1324,32 @@ function injectScriptToAccessInternalAPI() {
     }
   });
 }
+
+// 添加全局测试函数（用于调试）
+window.tencentDocExtensionDebug = {
+  testExtraction: () => {
+    logMessage("手动测试内容提取");
+    processTableCellContent();
+  },
+  
+  logDOMStructure: () => {
+    logAvailableElements();
+  },
+  
+  testClickHandler: (element) => {
+    if (!element) {
+      logMessage("请提供一个DOM元素进行测试");
+      return;
+    }
+    logMessage("手动测试点击处理器");
+    handleClick({ target: element });
+  },
+  
+  getListeningStatus: () => {
+    logMessage(`当前监听状态: ${isListening}`);
+    return isListening;
+  }
+};
 
 // 启动脚本
 initialize(); 

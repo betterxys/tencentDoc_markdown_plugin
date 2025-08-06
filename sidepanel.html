@@ -5,15 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Markdown 查看器</title>
   <link rel="stylesheet" href="sidepanel.css">
-  <!-- 添加 Markdown 解析库 -->
-  <script src="lib/marked.min.js"></script>
+  <!-- 添加 Markdown 解析库 - 使用更强大的 markdown-it -->
+  <script src="lib/markdown-it.min.js"></script>
   <!-- 添加 HTML 清理库 (防止 XSS) -->
   <script src="lib/purify.min.js"></script>
 </head>
 <body>
   <div class="panel-container">
     <header>
-      <div class="header-info" id="timestamp"></div>
+      <div class="header-info">
+        <div id="timestamp"></div>
+        <div id="content-info" class="content-info" style="display: none;"></div>
+      </div>
       <div class="controls">
         <button id="copy-btn" title="复制原始内容">
           <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 24 24">
@@ -55,7 +58,15 @@
     <div id="debug-console" class="debug-console">
       <div class="debug-header">
         <h3>调试日志</h3>
-        <button id="clear-log-btn" title="清除日志">清除</button>
+        <div class="debug-controls">
+          <button id="copy-log-btn" title="复制所有日志">
+            <svg xmlns="http://www.w3.org/2000/svg" height="16" width="16" viewBox="0 0 24 24">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+            </svg>
+            复制
+          </button>
+          <button id="clear-log-btn" title="清除日志">清除</button>
+        </div>
       </div>
       <div id="log-messages" class="log-messages"></div>
     </div>

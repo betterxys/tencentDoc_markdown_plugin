@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>快速功能验证</title>
+    <script src="lib/markdown-it.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .result { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>🔧 快速功能验证</h1>
+    
+    <div class="test">
+        <h2>1. markdown-it 基础功能测试</h2>
+        <div id="test1-result"></div>
+    </div>
+    
+    <div class="test">
+        <h2>2. 失败内容测试（带空行表格）</h2>
+        <div id="test2-result"></div>
+    </div>
+    
+    <div class="test">
+        <h2>3. DOMPurify 安全测试</h2>
+        <div id="test3-result"></div>
+    </div>
+    
+    <script>
+        function runTests() {
+            console.log('🚀 开始快速功能验证');
+            
+            // 测试1: markdown-it基础功能
+            try {
+                const md = markdownit({
+                    html: false,
+                    linkify: true,
+                    typographer: true
+                });
+                
+                const basicMarkdown = '# 标题\n\n**粗体** 和 *斜体*\n\n- 列表项1\n- 列表项2';
+                const basicResult = md.render(basicMarkdown);
+                
+                document.getElementById('test1-result').innerHTML = `
+                    <div class="success">✅ markdown-it 基础功能正常</div>
+                    <div class="result">${basicResult}</div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('test1-result').innerHTML = `
+                    <div class="error">❌ markdown-it 基础功能失败: ${error.message}</div>
+                `;
+            }
+            
+            // 测试2: 失败内容（带空行表格）
+            try {
+                const md = markdownit();
+                const failingContent = `### 测试表格
+
+| **行业** | **场景** |
+
+|----------|----------|
+
+| **化工** | 攻击场景 |`;
+                
+                const tableResult = md.render(failingContent);
+                const hasTable = /<table/.test(tableResult);
+                
+                document.getElementById('test2-result').innerHTML = `
+                    <div class="${hasTable ? 'success' : 'error'}">
+                        ${hasTable ? '✅' : '❌'} 表格渲染: ${hasTable ? '成功' : '失败'}
+                    </div>
+                    <div class="result">${tableResult}</div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('test2-result').innerHTML = `
+                    <div class="error">❌ 表格测试失败: ${error.message}</div>
+                `;
+            }
+            
+            // 测试3: DOMPurify安全测试
+            try {
+                const dirtyHtml = '<script>alert("XSS")</script><p>安全内容</p><table><tr><td>表格内容</td></tr></table>';
+                const cleanHtml = DOMPurify.sanitize(dirtyHtml, {
+                    ALLOWED_TAGS: ['p', 'table', 'tr', 'td', 'th'],
+                    ALLOWED_ATTR: []
+                });
+                
+                const hasScript = /<script/.test(cleanHtml);
+                const hasTable = /<table/.test(cleanHtml);
+                
+                document.getElementById('test3-result').innerHTML = `
+                    <div class="${!hasScript ? 'success' : 'error'}">
+                        ${!hasScript ? '✅' : '❌'} XSS防护: ${!hasScript ? '正常' : '失败'}
+                    </div>
+                    <div class="${hasTable ? 'success' : 'error'}">
+                        ${hasTable ? '✅' : '❌'} 表格保留: ${hasTable ? '正常' : '失败'}
+                    </div>
+                    <div class="result">${cleanHtml}</div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('test3-result').innerHTML = `
+                    <div class="error">❌ DOMPurify测试失败: ${error.message}</div>
+                `;
+            }
+            
+            console.log('✅ 快速功能验证完成');
+        }
+        
+        // 页面加载时自动运行测试
+        window.onload = runTests;
+    </script>
+</body>
+</html>

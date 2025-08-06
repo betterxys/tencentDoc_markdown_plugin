@@ -39,4 +39,27 @@ curl -o lib/purify.min.js https://cdn.jsdelivr.net/npm/dompurify@2.3.6/dist/puri
 ## 快捷键
 
 - `Ctrl+Shift+M` (Windows) 或 `Command+Shift+M` (Mac) - 打开侧边栏
-- 在侧边栏中，使用 `Ctrl+R` 或 `Command+R` 重新加载侧边栏 
+- 在侧边栏中，使用 `Ctrl+R` 或 `Command+R` 重新加载侧边栏
+- `Ctrl+~` (Windows) 或 `Command+~` (Mac) - 切换无障碍模式
+
+## 功能特性
+
+- **智能内容识别**: 自动检测 Markdown、JSON、代码等不同内容类型
+- **JSON + Markdown 支持**: 解析嵌套 JSON 中的 Markdown 内容并分别渲染
+- **代码语法高亮**: 支持 JavaScript、SQL 等常见代码语法高亮
+- **复制功能**: 一键复制原始内容到剪贴板
+- **查看模式切换**: 在渲染视图和源码视图之间切换
+- **无障碍模式**: 支持无障碍阅读优化
+- **置顶模式**: 可固定侧边栏展开状态
+
+## 技术栈
+
+- Chrome Extension Manifest V3
+- Markdown 解析: marked.js
+- HTML 清理: DOMPurify
+- 内容注入和消息传递机制
+- 防抖优化和 DOM 缓存
+
+## 开发说明
+
+详细的开发文档请参阅 `CLAUDE.md` 文件。

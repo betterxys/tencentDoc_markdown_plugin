@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>最小化表格测试</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        
+        .result {
+            border: 2px solid #007bff;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .raw-output {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 12px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* 表格样式 */
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th {
+            background-color: #f6f8fa !important;
+            font-weight: 600 !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>最小化表格测试</h1>
+    
+    <h2>测试1: 用户的完整内容</h2>
+    <div id="test1-result" class="result"></div>
+    <details>
+        <summary>查看原始HTML输出</summary>
+        <div id="test1-raw" class="raw-output"></div>
+    </details>
+    
+    <h2>测试2: 仅表格部分</h2>
+    <div id="test2-result" class="result"></div>
+    <details>
+        <summary>查看原始HTML输出</summary>
+        <div id="test2-raw" class="raw-output"></div>
+    </details>
+    
+    <h2>测试3: 简单表格</h2>
+    <div id="test3-result" class="result"></div>
+    <details>
+        <summary>查看原始HTML输出</summary>
+        <div id="test3-raw" class="raw-output"></div>
+    </details>
+    
+    <h2>调试信息</h2>
+    <div id="debug-info" class="raw-output"></div>
+    
+    <script>
+        function debug(message) {
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.textContent += '[' + new Date().toLocaleTimeString() + '] ' + message + '\n';
+        }
+        
+        function testContent(content, testId, description) {
+            debug(`\n=== ${description} ===`);
+            debug(`内容长度: ${content.length}`);
+            
+            try {
+                let html;
+                if (typeof marked.parse === 'function') {
+                    html = marked.parse(content, { gfm: true, breaks: false });
+                    debug('使用 marked.parse() 成功');
+                } else if (typeof marked === 'function') {
+                    html = marked(content, { gfm: true, breaks: false });
+                    debug('使用 marked() 成功');
+                } else {
+                    throw new Error('marked函数不可用');
+                }
+                
+                debug(`生成HTML长度: ${html.length}`);
+                debug(`包含<table>标签: ${/<table/.test(html)}`);
+                debug(`包含<th>标签: ${/<th/.test(html)}`);
+                debug(`包含<td>标签: ${/<td/.test(html)}`);
+                
+                // 显示原始HTML
+                document.getElementById(`${testId}-raw`).textContent = html;
+                
+                // 清理并显示HTML
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                debug(`DOMPurify清理后长度: ${cleanHtml.length}`);
+                debug(`最终包含<table>标签: ${/<table/.test(cleanHtml)}`);
+                
+                document.getElementById(`${testId}-result`).innerHTML = cleanHtml;
+                
+                // 检查渲染结果
+                const tableElements = document.getElementById(`${testId}-result`).querySelectorAll('table');
+                debug(`实际渲染的表格数量: ${tableElements.length}`);
+                
+                if (tableElements.length > 0) {
+                    tableElements.forEach((table, i) => {
+                        const rows = table.querySelectorAll('tr');
+                        const headers = table.querySelectorAll('th');
+                        const cells = table.querySelectorAll('td');
+                        debug(`表格${i+1}: ${rows.length}行, ${headers.length}个表头, ${cells.length}个单元格`);
+                    });
+                }
+                
+            } catch (error) {
+                debug(`错误: ${error.message}`);
+                document.getElementById(`${testId}-result`).innerHTML = 
+                    `<div style="color: red; font-weight: bold;">渲染失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载时执行所有测试
+        window.onload = function() {
+            debug('=== 开始测试 ===');
+            debug(`marked对象类型: ${typeof marked}`);
+            debug(`marked.parse可用: ${typeof marked.parse === 'function'}`);
+            debug(`marked版本: ${marked.version || 'unknown'}`);
+            debug(`DOMPurify可用: ${typeof DOMPurify === 'object'}`);
+            
+            // 测试1: 用户的完整内容
+            const fullContent = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+这是保险+科技+服务的模式。`;
+            
+            testContent(fullContent, 'test1', '用户完整内容');
+            
+            // 测试2: 仅表格部分
+            const tableOnly = `| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |`;
+            
+            testContent(tableOnly, 'test2', '仅表格部分');
+            
+            // 测试3: 简单表格
+            const simpleTable = `| A | B |
+|---|---|
+| 1 | 2 |`;
+            
+            testContent(simpleTable, 'test3', '简单表格');
+        };
+    </script>
+</body>
+</html>

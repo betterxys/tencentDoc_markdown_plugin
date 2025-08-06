@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试修复后的marked.js</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th {
+            background-color: #f6f8fa !important;
+            font-weight: 600 !important;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>测试修复后的marked.js API</h1>
+    
+    <div class="test-section">
+        <h2>API可用性测试</h2>
+        <div id="api-test"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>表格渲染测试</h2>
+        <h3>输入Markdown:</h3>
+        <pre id="input"></pre>
+        <h3>渲染结果:</h3>
+        <div id="output" style="border: 1px solid #ccc; padding: 10px; background: #f9f9f9;"></div>
+    </div>
+    
+    <script>
+        // 测试API可用性
+        function testAPI() {
+            const apiInfo = document.getElementById('api-test');
+            let info = '';
+            
+            info += `marked对象类型: ${typeof marked}<br>`;
+            info += `marked.parse可用: ${typeof marked.parse === 'function'}<br>`;
+            info += `marked.setOptions可用: ${typeof marked.setOptions === 'function'}<br>`;
+            info += `marked可用方法: ${Object.keys(marked).join(', ')}<br>`;
+            
+            if (marked.version) {
+                info += `marked版本: ${marked.version}<br>`;
+            }
+            
+            apiInfo.innerHTML = info;
+        }
+        
+        // 测试表格渲染
+        function testTableRendering() {
+            const testMarkdown = `# 表格测试
+
+| 问题 | 解决方案 | 推荐灯具 |
+|------|----------|----------|
+| **地面反光** | 低照度泛光+间接照明 | 悦上暗藏灯带 + U7筒灯（磨砂透镜） |
+| **墙面眩光** | 洗墙灯+蜂窝防眩网/哑光反光杯 | 水墨轨道灯 + 光力导轨灯 |
+
+## 对齐测试
+
+| 左对齐 | 居中对齐 | 右对齐 |
+|:-------|:--------:|-------:|
+| 测试1 | 测试2 | 测试3 |`;
+            
+            document.getElementById('input').textContent = testMarkdown;
+            
+            try {
+                let html;
+                if (typeof marked.parse === 'function') {
+                    html = marked.parse(testMarkdown, { gfm: true });
+                    console.log('使用marked.parse()成功');
+                } else if (typeof marked === 'function') {
+                    html = marked(testMarkdown, { gfm: true });
+                    console.log('使用marked()成功');
+                } else {
+                    throw new Error('marked函数不可用');
+                }
+                
+                // 清理HTML
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                document.getElementById('output').innerHTML = cleanHtml;
+                console.log('表格渲染成功，HTML长度:', html.length);
+                console.log('是否包含table标签:', /<table/.test(html));
+                
+            } catch (error) {
+                document.getElementById('output').innerHTML = `<div style="color: red;">错误: ${error.message}</div>`;
+                console.error('渲染失败:', error);
+            }
+        }
+        
+        // 页面加载时执行测试
+        window.onload = function() {
+            testAPI();
+            testTableRendering();
+        };
+    </script>
+</body>
+</html>

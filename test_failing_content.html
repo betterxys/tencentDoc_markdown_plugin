@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试失败的具体内容</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .debug-log {
+            background: #f5f5f5;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            white-space: pre-wrap;
+        }
+        
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #d1d5da !important;
+        }
+        
+        th {
+            background-color: #f6f8fa !important;
+            font-weight: 600 !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>测试失败的具体内容</h1>
+    
+    <div class="test-section">
+        <h2>用户提供的失败内容</h2>
+        <button onclick="testFailingContent()">测试失败内容</button>
+        <div id="result1"></div>
+        <div id="debug1" class="debug-log"></div>
+    </div>
+    
+    <script>
+        function log(message) {
+            const debugDiv = document.getElementById('debug1');
+            debugDiv.textContent += '[' + new Date().toLocaleTimeString() + '] ' + message + '\n';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('debug1').textContent = '';
+        }
+        
+        // 当前的表格检测逻辑（与sidepanel.js保持一致）
+        function detectTable(content) {
+            const hasTableNew = /\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|/.test(content);
+            const hasTableOld = /\|.*\|/.test(content);
+            
+            return {
+                newDetection: hasTableNew,
+                oldDetection: hasTableOld,
+                allPipes: content.match(/\|[^|\n]*\|/g),
+                tables: content.match(/\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/g)
+            };
+        }
+        
+        function testFailingContent() {
+            // 用户提供的具体失败内容
+            const failingContent = `思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+这是保险+科技+服务的模式。`;
+            
+            clearLog();
+            log(`开始测试失败内容，长度: ${failingContent.length}`);
+            
+            const detection = detectTable(failingContent);
+            log(`新检测逻辑: ${detection.newDetection}`);
+            log(`旧检测逻辑: ${detection.oldDetection}`);
+            
+            if (detection.allPipes) {
+                log(`找到 ${detection.allPipes.length} 个竖线模式:`);
+                detection.allPipes.forEach((pipe, i) => {
+                    log(`  ${i+1}: ${pipe}`);
+                });
+            }
+            
+            if (detection.tables) {
+                log(`找到 ${detection.tables.length} 个真实表格:`);
+                detection.tables.forEach((table, i) => {
+                    log(`表格 ${i+1}: ${table.substring(0, 100)}...`);
+                });
+            }
+            
+            // 测试不同方法的渲染结果
+            log('\n=== 开始渲染测试 ===');
+            
+            try {
+                let html;
+                if (typeof marked.parse === 'function') {
+                    html = marked.parse(failingContent, { gfm: true });
+                    log('使用 marked.parse() 成功');
+                } else if (typeof marked === 'function') {
+                    html = marked(failingContent, { gfm: true });
+                    log('使用 marked() 成功');
+                } else {
+                    throw new Error('marked函数不可用');
+                }
+                
+                log(`生成HTML长度: ${html.length}`);
+                log(`包含table标签: ${/<table/.test(html)}`);
+                
+                // 分析HTML结构
+                const tableMatches = html.match(/<table[\s\S]*?<\/table>/g);
+                if (tableMatches) {
+                    log(`找到 ${tableMatches.length} 个table元素`);
+                    tableMatches.forEach((table, i) => {
+                        log(`表格 ${i+1} HTML: ${table.substring(0, 200)}...`);
+                    });
+                } else {
+                    log('HTML中没有找到table元素');
+                }
+                
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                log(`清理后HTML长度: ${cleanHtml.length}`);
+                log(`最终包含table标签: ${/<table/.test(cleanHtml)}`);
+                
+                document.getElementById('result1').innerHTML = cleanHtml;
+                
+                // 额外调试：分析原始内容的行结构
+                log('\n=== 内容行分析 ===');
+                const lines = failingContent.split('\n');
+                lines.forEach((line, i) => {
+                    if (line.includes('|')) {
+                        log(`行 ${i+1}: ${line}`);
+                        log(`  是否为表格行: ${/^\s*\|.*\|\s*$/.test(line)}`);
+                        log(`  是否为分隔符: ${/^\s*\|[\s\-:]*\|\s*$/.test(line)}`);
+                    }
+                });
+                
+            } catch (error) {
+                log(`错误: ${error.message}`);
+                document.getElementById('result1').innerHTML = `<div style="color: red;">渲染失败: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载时自动执行测试
+        window.onload = function() {
+            testFailingContent();
+        };
+    </script>
+</body>
+</html>

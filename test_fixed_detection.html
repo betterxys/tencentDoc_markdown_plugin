@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试修复后的表格检测</title>
+    <script src="lib/marked.min.js"></script>
+    <script src="lib/purify.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            border: 2px solid #007bff;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        
+        .result {
+            border: 1px solid #28a745;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 6px;
+            background-color: white;
+        }
+        
+        .debug-log {
+            background: #343a40;
+            color: #28a745;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            border-radius: 4px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        
+        /* 表格样式 */
+        table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 16px 0 !important;
+            border: 2px solid #007bff !important;
+        }
+        
+        th, td {
+            padding: 12px !important;
+            text-align: left !important;
+            border: 1px solid #007bff !important;
+        }
+        
+        th {
+            background-color: #e3f2fd !important;
+            font-weight: 600 !important;
+            color: #1976d2 !important;
+        }
+        
+        tr:nth-child(even) td {
+            background-color: #f8f9fa !important;
+        }
+        
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 测试修复后的表格检测</h1>
+    
+    <div class="test-section">
+        <h2>📋 用户失败内容测试</h2>
+        <button onclick="testFailingContent()" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">🚀 测试失败内容</button>
+        <div id="result-failing" class="result"></div>
+        <details>
+            <summary>📊 查看调试日志</summary>
+            <div id="debug-failing" class="debug-log"></div>
+        </details>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 对比测试</h2>
+        <button onclick="runComparisonTests()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">🔍 运行对比测试</button>
+        <div id="result-comparison" class="result"></div>
+        <details>
+            <summary>📈 查看对比日志</summary>
+            <div id="debug-comparison" class="debug-log"></div>
+        </details>
+    </div>
+    
+    <script>
+        function log(sectionId, message, level = 'info') {
+            const debugDiv = document.getElementById(`debug-${sectionId}`);
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = level === 'success' ? '✅' : level === 'warning' ? '⚠️' : level === 'error' ? '❌' : 'ℹ️';
+            debugDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        function clearLog(sectionId) {
+            document.getElementById(`debug-${sectionId}`).textContent = '';
+        }
+        
+        // 使用修复后的表格检测逻辑（与sidepanel.js保持一致）
+        function detectTableFixed(content) {
+            const hasTableNew = /\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*/.test(content);
+            const hasTableOld = /\|.*\|/.test(content);
+            
+            return {
+                newDetection: hasTableNew,
+                oldDetection: hasTableOld,
+                allPipes: content.match(/\|[^|\n]*\|/g),
+                tables: content.match(/\|.*\|[\s\S]*?\n\s*\|(\s*[\-:]+\s*\|)+\s*[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/g)
+            };
+        }
+        
+        // 旧的表格检测逻辑（用于对比）
+        function detectTableOld(content) {
+            const hasTableOld = /\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|/.test(content);
+            return {
+                detection: hasTableOld,
+                tables: content.match(/\|.*\|[\s\S]*?\n\s*\|[\s\-:]*\|[\s\S]*?(?=\n\s*\n|\n\s*[^|]|\n\s*$|$)/g)
+            };
+        }
+        
+        function renderWithDetection(content, sectionId, useNewDetection = true) {
+            const detection = useNewDetection ? detectTableFixed(content) : detectTableOld(content);
+            const hasTable = useNewDetection ? detection.newDetection : detection.detection;
+            
+            log(sectionId, `开始渲染测试 (${useNewDetection ? '新' : '旧'}检测逻辑)`);
+            log(sectionId, `内容长度: ${content.length}`);
+            log(sectionId, `检测到表格: ${hasTable}`, hasTable ? 'success' : 'warning');
+            
+            if (detection.allPipes) {
+                log(sectionId, `找到 ${detection.allPipes.length} 个竖线模式`);
+            }
+            
+            if (detection.tables) {
+                log(sectionId, `找到 ${detection.tables.length} 个真实表格`, 'success');
+                detection.tables.forEach((table, i) => {
+                    log(sectionId, `表格 ${i+1} 预览: ${table.substring(0, 50)}...`);
+                });
+            } else {
+                log(sectionId, `没有找到真实表格`, 'error');
+            }
+            
+            try {
+                let html;
+                if (typeof marked.parse === 'function') {
+                    html = marked.parse(content, { gfm: true, breaks: false });
+                    log(sectionId, '使用 marked.parse() 成功', 'success');
+                } else {
+                    html = marked(content, { gfm: true, breaks: false });
+                    log(sectionId, '使用 marked() 成功', 'success');
+                }
+                
+                log(sectionId, `生成HTML长度: ${html.length}`);
+                log(sectionId, `包含<table>标签: ${/<table/.test(html)}`, /<table/.test(html) ? 'success' : 'error');
+                
+                const cleanHtml = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'strong', 'em', 'u', 'code', 'pre', 'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'align', 'style', 'colspan', 'rowspan']
+                });
+                
+                log(sectionId, `DOMPurify清理后长度: ${cleanHtml.length}`);
+                log(sectionId, `最终包含<table>标签: ${/<table/.test(cleanHtml)}`, /<table/.test(cleanHtml) ? 'success' : 'error');
+                
+                return cleanHtml;
+                
+            } catch (error) {
+                log(sectionId, `渲染错误: ${error.message}`, 'error');
+                return `<div style="color: red; font-weight: bold;">渲染失败: ${error.message}</div>`;
+            }
+        }
+        
+        function testFailingContent() {
+            const failingContent = \`思考过程：
+
+嗯，用户询问网安险与天创机器人产品捆绑销售在化工及电力行业的设计方案。
+
+### ⚙️ **一、行业风险特性与保险需求**
+
+| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |
+
+这是保险+科技+服务的模式。\`;
+            
+            clearLog('failing');
+            log('failing', '🚀 开始测试用户失败内容');
+            
+            const result = renderWithDetection(failingContent, 'failing', true);
+            document.getElementById('result-failing').innerHTML = result;
+            
+            // 检查最终渲染结果
+            const tables = document.getElementById('result-failing').querySelectorAll('table');
+            if (tables.length > 0) {
+                log('failing', \`🎉 成功！渲染了 \${tables.length} 个表格\`, 'success');
+                tables.forEach((table, i) => {
+                    const rows = table.querySelectorAll('tr');
+                    const headers = table.querySelectorAll('th');
+                    const cells = table.querySelectorAll('td');
+                    log('failing', \`表格\${i+1}: \${rows.length}行, \${headers.length}个表头, \${cells.length}个单元格\`, 'success');
+                });
+            } else {
+                log('failing', '❌ 失败！没有渲染出表格', 'error');
+            }
+        }
+        
+        function runComparisonTests() {
+            clearLog('comparison');
+            log('comparison', '🔍 开始对比测试');
+            
+            const testContent = \`| **行业** | **核心风险场景** | **网安险保障重点** | **政策依据** |
+|----------|------------------|-------------------|-------------|
+| **化工行业** | 工控系统（DCS/SIS）遭勒索攻击导致生产中断 | 覆盖停产损失（日均产值×停机天数） | 《工业控制系统信息安全防护指南》 |
+| **电力行业** | 电网监控系统被入侵引发大面积停电 | 赔偿电网瘫痪罚款（单次最高500万） | 《电力可靠性管理办法》 |\`;
+            
+            log('comparison', '测试内容: 纯表格内容');
+            
+            // 测试旧检测逻辑
+            log('comparison', '\\n=== 旧检测逻辑测试 ===');
+            const oldDetection = detectTableOld(testContent);
+            log('comparison', \`旧检测结果: \${oldDetection.detection}\`, oldDetection.detection ? 'success' : 'error');
+            
+            // 测试新检测逻辑
+            log('comparison', '\\n=== 新检测逻辑测试 ===');
+            const newDetection = detectTableFixed(testContent);
+            log('comparison', \`新检测结果: \${newDetection.newDetection}\`, newDetection.newDetection ? 'success' : 'error');
+            
+            // 渲染测试
+            log('comparison', '\\n=== 渲染测试 ===');
+            const result = renderWithDetection(testContent, 'comparison', true);
+            
+            document.getElementById('result-comparison').innerHTML = \`
+                <h3>📊 检测对比结果</h3>
+                <p><strong>旧检测逻辑:</strong> <span class="\${oldDetection.detection ? 'success' : 'error'}">\${oldDetection.detection ? '✅ 检测到表格' : '❌ 未检测到表格'}</span></p>
+                <p><strong>新检测逻辑:</strong> <span class="\${newDetection.newDetection ? 'success' : 'error'}">\${newDetection.newDetection ? '✅ 检测到表格' : '❌ 未检测到表格'}</span></p>
+                <h3>🎨 渲染结果</h3>
+                \${result}
+            \`;
+            
+            log('comparison', '✅ 对比测试完成', 'success');
+        }
+        
+        // 页面加载时显示系统信息
+        window.onload = function() {
+            console.log('🔧 表格检测修复测试页面已加载');
+            console.log('marked.js版本:', marked.version || 'unknown');
+            console.log('DOMPurify可用:', typeof DOMPurify === 'object');
+        };
+    </script>
+</body>
+</html>

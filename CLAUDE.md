@@ -13,7 +13,7 @@ The extension requires two external libraries that must be downloaded manually:
 
 ```bash
 mkdir -p lib
-curl -o lib/marked.min.js https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js
+curl -o lib/markdown-it.min.js https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js
 curl -o lib/purify.min.js https://cdn.jsdelivr.net/npm/dompurify@2.3.6/dist/purify.min.js
 ```
 
@@ -86,7 +86,7 @@ Since this is a Chrome extension:
 - **NEW**: Debounced processing, DOM caching, smart Markdown detection, unified error handling
 
 **sidepanel.js/html/css**: Side panel UI for Markdown rendering
-- Markdown parsing using marked.js library
+- Markdown parsing using markdown-it library (upgraded from marked.js for better table support)
 - HTML sanitization using DOMPurify
 - Accessibility mode with enhanced contrast and font sizes
 - Debug console with logging from all components
