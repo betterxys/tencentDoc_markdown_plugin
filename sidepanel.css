@@ -982,6 +982,18 @@ body.accessibility-mode .markdown-body {
   padding-left: 24px;
 }
 
+/* 确保有序列表正确显示数字 */
+.markdown-body ol {
+  list-style-type: decimal !important;
+  counter-reset: none !important;
+}
+
+.markdown-body ol li {
+  list-style-type: decimal !important;
+  display: list-item !important;
+  counter-increment: none !important;
+}
+
 .markdown-body li {
   margin-bottom: 4px;
 }
@@ -1152,6 +1164,31 @@ body.accessibility-mode .markdown-body code {
   border: 1px solid #ccc;
 }
 
+/* 确保所有有序列表正确显示数字 */
+ol {
+  list-style-type: decimal !important;
+  counter-reset: none !important;
+}
+
+ol li {
+  list-style-type: decimal !important;
+  display: list-item !important;
+  counter-increment: none !important;
+}
+
+/* 修复JSON和其他内容区域的有序列表 */
+.json-rendered ol, .markdown-rendered ol, .content-type-markdown ol {
+  list-style-type: decimal !important;
+  counter-reset: none !important;
+  padding-left: 20px !important;
+}
+
+.json-rendered ol li, .markdown-rendered ol li, .content-type-markdown ol li {
+  list-style-type: decimal !important;
+  display: list-item !important;
+  counter-increment: none !important;
+}
+
 /* 无障碍模式下的表格样式 */
 body.accessibility-mode .markdown-body table,
 body.accessibility-mode table {
@@ -1192,6 +1229,34 @@ body.accessibility-mode .markdown-body blockquote {
   padding: 0 24px;
   border-left: 6px solid var(--a11y-border-color);
   background-color: #f0f0f0;
+}
+
+/* 无障碍模式下的有序列表样式 */
+body.accessibility-mode ol {
+  list-style-type: decimal !important;
+  counter-reset: none !important;
+  padding-left: 30px !important;
+  font-size: 16px !important;
+  line-height: 1.8 !important;
+}
+
+body.accessibility-mode ol li {
+  list-style-type: decimal !important;
+  display: list-item !important;
+  counter-increment: none !important;
+  margin-bottom: 8px !important;
+}
+
+body.accessibility-mode .markdown-body ol {
+  list-style-type: decimal !important;
+  counter-reset: none !important;
+  padding-left: 30px !important;
+}
+
+body.accessibility-mode .markdown-body ol li {
+  list-style-type: decimal !important;
+  display: list-item !important;
+  counter-increment: none !important;
 }
 
 /* 空状态 */

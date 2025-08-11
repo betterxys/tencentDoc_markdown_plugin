@@ -9,13 +9,16 @@ This is a Chrome browser extension (腾讯文档 Markdown 查看器) that extrac
 ## Development Commands
 
 ### Library Setup
-The extension requires two external libraries that must be downloaded manually:
+The extension requires external libraries that must be downloaded manually:
 
 ```bash
 mkdir -p lib
 curl -o lib/markdown-it.min.js https://cdn.jsdelivr.net/npm/markdown-it@13.0.2/dist/markdown-it.min.js
 curl -o lib/purify.min.js https://cdn.jsdelivr.net/npm/dompurify@2.3.6/dist/purify.min.js
+curl -o lib/mermaid.min.js https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js
 ```
+
+Note: The extension has been upgraded from marked.js to markdown-it for better table support and includes Mermaid support for diagram rendering.
 
 ### Extension Installation
 Since this is a Chrome extension:
@@ -83,15 +86,20 @@ Since this is a Chrome extension:
 - Event listeners for clicks, keyboard shortcuts, and DOM mutations
 - Text extraction from various Tencent Docs UI elements (formula bar, input areas, contenteditable elements)
 - Support for stopping/starting listening based on extension state
-- **NEW**: Debounced processing, DOM caching, smart Markdown detection, unified error handling
+- Intelligent content type detection with scoring system to prevent misclassification
+- JSON content repair mechanisms to handle DOM-corrupted content
+- Enhanced Markdown detection that avoids false positives for plain text
+- Debounced processing, DOM caching, smart Markdown detection, unified error handling
 
 **sidepanel.js/html/css**: Side panel UI for Markdown rendering
 - Markdown parsing using markdown-it library (upgraded from marked.js for better table support)
+- Mermaid diagram rendering support for flowcharts, sequence diagrams, etc.
 - HTML sanitization using DOMPurify
 - Accessibility mode with enhanced contrast and font sizes
 - Debug console with logging from all components
 - Pin/unpin functionality to control auto-rendering behavior
-- **NEW**: Copy functionality, view mode toggle, loading states, content type indicators
+- Copy functionality, view mode toggle, loading states, content type indicators
+- Enhanced table preprocessing to fix DOM pollution issues from Tencent Docs
 
 ### Data Flow
 
@@ -127,6 +135,48 @@ Chrome local storage contains:
 - Script injection for accessing internal Tencent Docs APIs (limited scope)
 - Host permissions restricted to Tencent Docs domains only
 
+## Development Workflow
+
+### Testing and Debugging
+- Debug functions are exposed globally via `window.testTableRendering()`, `window.testContentTableDetection()`, `window.debugCurrentContent()`
+- Comprehensive debug console in side panel shows real-time logs from all components
+- Test HTML files in root directory provide isolated testing environments for specific features
+- Use browser's developer tools on extension pages: `chrome-extension://[id]/sidepanel.html`
+
+### Common Issues and Solutions
+
+**Table Rendering Problems**: 
+- Tables with empty lines between rows require preprocessing via `cleanTableStructure()`
+- Use `preprocessTencentDocsContent()` for comprehensive content cleanup
+
+**Content Type Misclassification**:
+- JSON content has repair mechanisms via `tryFixJSONContent()`
+- Markdown detection uses intelligent scoring system to avoid false positives
+- Plain text with list-like patterns (e.g., "- 必做:") properly detected as text, not Markdown
+
+**CSS Issues**:
+- Ordered lists use `!important` rules to override potential conflicts
+- Table styles are specifically designed to work with markdown-it output
+- Accessibility mode has enhanced contrast and sizing
+
+### Architecture Patterns
+
+**Multi-Strategy Content Extraction**: Content extraction follows a priority hierarchy:
+1. `input.value` (cleanest source)
+2. HTML structure with preserved formatting
+3. `textContent` with line break restoration
+4. `innerText` with cleanup (last resort)
+
+**Intelligent Content Classification**: Uses scoring system rather than simple pattern matching:
+- Markdown requires ≥2 points from various features (headers=3pts, tables=3pts, etc.)
+- List detection excludes colon-terminated items to avoid title confusion
+- JSON repair handles double-encoded content and extracts from corrupted text
+
+**Error-Resilient Processing**: Each processing stage has fallbacks:
+- markdown-it → manual table parsing → basic rendering
+- JSON parsing → content repair → code highlighting
+- Content extraction → multiple DOM selectors → cached results
+
 ## Important Notes
 
 - Extension automatically disables on non-Tencent Docs pages
@@ -134,3 +184,4 @@ Chrome local storage contains:
 - Mutation observers monitor dynamic content changes in spreadsheet interface
 - All components communicate via Chrome extension messaging APIs
 - No build process required - direct JavaScript files loaded by Chrome
+- Content Security Policy restrictions prevent script injection (CSP compliant design)

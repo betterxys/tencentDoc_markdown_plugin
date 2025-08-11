@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>侧边栏测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 20px;
+      padding: 0;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #log {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      padding: 10px;
+      margin-top: 20px;
+      border-radius: 4px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 侧边栏调试工具</h1>
+    
+    <div class="status success">
+      ✅ 侧边栏已成功加载
+    </div>
+    
+    <div>
+      <h3>调试操作</h3>
+      <button onclick="testAPI()">测试Chrome API</button>
+      <button onclick="testStorage()">测试存储</button>
+      <button onclick="sendTestMessage()">发送测试消息</button>
+      <button onclick="clearLog()">清除日志</button>
+    </div>
+    
+    <div id="log"></div>
+  </div>
+
+  <script>
+    function log(message) {
+      const logElement = document.getElementById('log');
+      const timestamp = new Date().toLocaleTimeString();
+      logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+      logElement.scrollTop = logElement.scrollHeight;
+      console.log(message);
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '';
+    }
+
+    function testAPI() {
+      log('=== 测试Chrome扩展API ===');
+      log(`chrome.runtime: ${!!chrome.runtime}`);
+      log(`chrome.storage: ${!!chrome.storage}`);
+      log(`chrome.sidePanel: ${!!chrome.sidePanel}`);
+      
+      if (chrome.runtime) {
+        log(`扩展ID: ${chrome.runtime.id}`);
+      }
+    }
+
+    function testStorage() {
+      log('=== 测试Chrome存储 ===');
+      try {
+        chrome.storage.local.set({ testKey: 'testValue' }, () => {
+          log('存储写入成功');
+          chrome.storage.local.get(['testKey'], (data) => {
+            log(`存储读取结果: ${JSON.stringify(data)}`);
+          });
+        });
+      } catch (error) {
+        log(`存储测试失败: ${error.message}`);
+      }
+    }
+
+    function sendTestMessage() {
+      log('=== 发送测试消息到背景脚本 ===');
+      try {
+        chrome.runtime.sendMessage({ 
+          type: 'sidePanel_initialized',
+          test: true 
+        }, (response) => {
+          log(`背景脚本响应: ${JSON.stringify(response)}`);
+        });
+      } catch (error) {
+        log(`消息发送失败: ${error.message}`);
+      }
+    }
+
+    // 页面加载时自动执行基本测试
+    document.addEventListener('DOMContentLoaded', () => {
+      log('侧边栏测试页面已加载');
+      testAPI();
+      
+      // 发送初始化消息
+      setTimeout(() => {
+        sendTestMessage();
+      }, 1000);
+    });
+
+    // 监听来自背景脚本的消息
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      log(`收到消息: ${JSON.stringify(message)}`);
+      sendResponse({ status: 'received' });
+      return true;
+    });
+  </script>
+</body>
+</html>

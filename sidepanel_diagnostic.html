@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>侧边栏诊断页面</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .diagnostic-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #1a73e8;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .status-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .status-section h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 8px 0;
+      padding: 8px;
+      background: white;
+      border-radius: 4px;
+    }
+    .status-ok {
+      color: #0d7a0d;
+      background: #d1ffd1;
+    }
+    .status-error {
+      color: #d32f2f;
+      background: #ffebee;
+    }
+    .status-warning {
+      color: #f57c00;
+      background: #fff3e0;
+    }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    .log-output {
+      background: #1e1e1e;
+      color: #ffffff;
+      padding: 15px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      margin: 10px 0;
+    }
+    .test-area {
+      margin: 20px 0;
+      padding: 15px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+  <div class="diagnostic-container">
+    <h1>🔧 侧边栏诊断工具</h1>
+    
+    <div class="status-section">
+      <h3>📋 基本信息</h3>
+      <div id="basic-info"></div>
+    </div>
+    
+    <div class="status-section">
+      <h3>📚 依赖库状态</h3>
+      <div id="library-status"></div>
+    </div>
+    
+    <div class="status-section">
+      <h3>🔌 Chrome API 状态</h3>
+      <div id="api-status"></div>
+    </div>
+    
+    <div class="status-section">
+      <h3>📝 DOM 元素状态</h3>
+      <div id="dom-status"></div>
+    </div>
+    
+    <div class="status-section">
+      <h3>🛠️ 操作面板</h3>
+      <button onclick="runFullDiagnostic()">运行完整诊断</button>
+      <button onclick="testMarkdownRendering()">测试Markdown渲染</button>
+      <button onclick="testMessagePassing()">测试消息传递</button>
+      <button onclick="clearDiagnosticLog()">清除日志</button>
+    </div>
+    
+    <div class="test-area">
+      <h3>🎯 测试结果</h3>
+      <div id="test-result">等待测试...</div>
+    </div>
+    
+    <div class="status-section">
+      <h3>📄 诊断日志</h3>
+      <div id="diagnostic-log" class="log-output">准备就绪，等待诊断...</div>
+    </div>
+  </div>
+
+  <!-- 加载必要的依赖库 -->
+  <script src="lib/markdown-it.min.js"></script>
+  <script src="lib/purify.min.js"></script>
+  <script src="lib/mermaid.min.js"></script>
+
+  <script>
+    let diagnosticLog = '';
+    
+    function log(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = `[${timestamp}] ${message}`;
+      diagnosticLog += logEntry + '\n';
+      console.log(logEntry);
+      
+      const logElement = document.getElementById('diagnostic-log');
+      if (logElement) {
+        logElement.textContent = diagnosticLog;
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+    }
+    
+    function clearDiagnosticLog() {
+      diagnosticLog = '';
+      document.getElementById('diagnostic-log').textContent = '日志已清除...';
+    }
+    
+    function updateStatus(elementId, items) {
+      const element = document.getElementById(elementId);
+      element.innerHTML = '';
+      
+      Object.entries(items).forEach(([name, status]) => {
+        const item = document.createElement('div');
+        item.className = 'status-item';
+        
+        let statusClass = 'status-error';
+        let statusIcon = '❌';
+        
+        if (status === true) {
+          statusClass = 'status-ok';
+          statusIcon = '✅';
+        } else if (status === 'warning') {
+          statusClass = 'status-warning';
+          statusIcon = '⚠️';
+        }
+        
+        item.className += ' ' + statusClass;
+        item.innerHTML = `
+          <span>${name}</span>
+          <span>${statusIcon}</span>
+        `;
+        
+        element.appendChild(item);
+      });
+    }
+    
+    function runFullDiagnostic() {
+      log('开始运行完整诊断...');
+      
+      // 基本信息检查
+      const basicInfo = {
+        '页面URL': location.href.includes('chrome-extension://'),
+        '文档状态': document.readyState === 'complete',
+        'Chrome版本': navigator.userAgent.includes('Chrome'),
+        '扩展环境': !!window.chrome?.runtime
+      };
+      updateStatus('basic-info', basicInfo);
+      log(`基本信息检查完成: ${Object.values(basicInfo).filter(v => v).length}/${Object.keys(basicInfo).length} 项通过`);
+      
+      // 依赖库检查
+      const libraryStatus = {
+        'markdown-it': typeof markdownit !== 'undefined',
+        'DOMPurify': typeof DOMPurify !== 'undefined',
+        'Mermaid': typeof mermaid !== 'undefined'
+      };
+      updateStatus('library-status', libraryStatus);
+      log(`依赖库检查完成: ${Object.values(libraryStatus).filter(v => v).length}/${Object.keys(libraryStatus).length} 个库加载成功`);
+      
+      // Chrome API检查
+      const apiStatus = {
+        'chrome': !!window.chrome,
+        'chrome.runtime': !!window.chrome?.runtime,
+        'chrome.storage': !!window.chrome?.storage,
+        'chrome.sidePanel': !!window.chrome?.sidePanel
+      };
+      updateStatus('api-status', apiStatus);
+      log(`Chrome API检查完成: ${Object.values(apiStatus).filter(v => v).length}/${Object.keys(apiStatus).length} 个API可用`);
+      
+      // DOM元素检查（模拟侧边栏应有的元素）
+      const requiredElements = [
+        'markdown-output', 'timestamp', 'content-info', 
+        'log-messages', 'debug-console', 'refresh-btn'
+      ];
+      
+      const domStatus = {};
+      requiredElements.forEach(id => {
+        domStatus[id] = !!document.getElementById(id);
+      });
+      updateStatus('dom-status', domStatus);
+      log(`DOM元素检查完成: ${Object.values(domStatus).filter(v => v).length}/${Object.keys(domStatus).length} 个元素存在`);
+      
+      // 总结
+      const totalItems = Object.keys(basicInfo).length + Object.keys(libraryStatus).length + 
+                        Object.keys(apiStatus).length + Object.keys(domStatus).length;
+      const passedItems = Object.values(basicInfo).filter(v => v).length +
+                         Object.values(libraryStatus).filter(v => v).length +
+                         Object.values(apiStatus).filter(v => v).length +
+                         Object.values(domStatus).filter(v => v).length;
+      
+      log(`诊断完成: ${passedItems}/${totalItems} 项检查通过`);
+      
+      if (passedItems === totalItems) {
+        log('✅ 所有检查通过，侧边栏应该能正常工作');
+      } else {
+        log(`⚠️ 发现 ${totalItems - passedItems} 个问题，可能影响侧边栏功能`);
+      }
+    }
+    
+    function testMarkdownRendering() {
+      log('开始测试Markdown渲染...');
+      
+      if (typeof markdownit === 'undefined') {
+        log('❌ markdown-it未加载，无法测试渲染');
+        document.getElementById('test-result').innerHTML = '<div style="color: red;">markdown-it未加载</div>';
+        return;
+      }
+      
+      try {
+        const md = markdownit();
+        const testContent = `# 测试标题
+
+这是一个**粗体**和*斜体*的测试。
+
+| 列1 | 列2 |
+|-----|-----|
+| 数据1 | 数据2 |
+
+- 列表项1
+- 列表项2
+
+\`\`\`javascript
+console.log('代码块测试');
+\`\`\``;
+        
+        const html = md.render(testContent);
+        document.getElementById('test-result').innerHTML = html;
+        log('✅ Markdown渲染测试成功');
+      } catch (error) {
+        log(`❌ Markdown渲染测试失败: ${error.message}`);
+        document.getElementById('test-result').innerHTML = `<div style="color: red;">渲染失败: ${error.message}</div>`;
+      }
+    }
+    
+    function testMessagePassing() {
+      log('开始测试消息传递...');
+      
+      if (!window.chrome?.runtime) {
+        log('❌ Chrome runtime API不可用，无法测试消息传递');
+        return;
+      }
+      
+      try {
+        chrome.runtime.sendMessage({
+          type: 'debug_test',
+          timestamp: Date.now(),
+          source: 'diagnostic_page'
+        }, response => {
+          if (chrome.runtime.lastError) {
+            log(`❌ 消息传递测试失败: ${chrome.runtime.lastError.message}`);
+          } else {
+            log(`✅ 消息传递测试成功: ${JSON.stringify(response)}`);
+          }
+        });
+      } catch (error) {
+        log(`❌ 消息传递测试异常: ${error.message}`);
+      }
+    }
+    
+    // 页面加载完成后自动运行诊断
+    document.addEventListener('DOMContentLoaded', () => {
+      log('诊断页面加载完成');
+      setTimeout(runFullDiagnostic, 500);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>插件功能测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .test-section {
+      margin: 30px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+    .test-section h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    .warning {
+      color: orange;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+      background: white;
+      border: 1px solid #eee;
+    }
+    .step {
+      margin: 15px 0;
+      padding: 15px;
+      background: white;
+      border-left: 4px solid #1a73e8;
+    }
+    .step h4 {
+      margin: 0 0 10px 0;
+      color: #1a73e8;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 腾讯文档 Markdown 查看器测试</h1>
+  
+  <div class="test-section">
+    <h3>📋 测试前准备</h3>
+    <p>在开始测试前，请确保：</p>
+    <ul>
+      <li>Chrome版本 ≥ 114</li>
+      <li>扩展已正确安装并启用</li>
+      <li>当前在普通网页上（不是Chrome内部页面）</li>
+    </ul>
+    <button onclick="checkPrerequisites()">检查前置条件</button>
+    <div id="prereq-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>🔧 自动化测试</h3>
+    <p>运行完整的功能测试</p>
+    <button onclick="runAllTests()">运行所有测试</button>
+    <div id="test-results"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>📝 手动测试步骤</h3>
+    
+    <div class="step">
+      <h4>步骤1: 测试扩展基本功能</h4>
+      <p>1. 点击浏览器工具栏中的插件图标</p>
+      <p>2. 检查侧边栏是否成功打开</p>
+      <p>3. 观察侧边栏中是否显示默认的"点击腾讯文档中的单元格..."提示</p>
+      <button onclick="testBasicFunction()">验证基本功能</button>
+      <div id="basic-result"></div>
+    </div>
+
+    <div class="step">
+      <h4>步骤2: 测试腾讯文档集成</h4>
+      <p>1. 打开腾讯文档表格页面</p>
+      <p>2. 在任意单元格中输入一些Markdown内容，例如：</p>
+      <pre># 测试标题
+
+这是一个**粗体**测试。
+
+| 列1 | 列2 |
+|-----|-----|
+| 数据1 | 数据2 |</pre>
+      <p>3. 点击该单元格</p>
+      <p>4. 观察侧边栏是否显示渲染后的Markdown内容</p>
+    </div>
+
+    <div class="step">
+      <h4>步骤3: 测试调试功能</h4>
+      <p>1. 在侧边栏中点击调试按钮（齿轮图标）</p>
+      <p>2. 查看调试日志是否正常显示</p>
+      <p>3. 尝试复制日志功能</p>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h3>🚨 故障排查</h3>
+    <p>如果测试失败，请按以下步骤排查：</p>
+    
+    <div class="step">
+      <h4>检查背景脚本日志</h4>
+      <p>1. 打开 <code>chrome://extensions/</code></p>
+      <p>2. 找到扩展，点击"详细信息"</p>
+      <p>3. 在"检查视图"部分点击"背景脚本"</p>
+      <p>4. 查看Console中的日志输出</p>
+      <button onclick="openExtensionPage()">打开扩展管理页面</button>
+    </div>
+
+    <div class="step">
+      <h4>运行诊断工具</h4>
+      <p>使用内置的诊断页面检查所有组件状态</p>
+      <button onclick="openDiagnostic()">打开诊断页面</button>
+    </div>
+
+    <div class="step">
+      <h4>查看详细故障排查指南</h4>
+      <p>查看完整的故障排查文档</p>
+      <button onclick="showTroubleshooting()">查看故障排查指南</button>
+    </div>
+  </div>
+
+  <script>
+    function log(message, type = 'info') {
+      console.log(`[Test] ${message}`);
+    }
+
+    function showResult(elementId, message, type = 'info') {
+      const element = document.getElementById(elementId);
+      const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'warning';
+      element.innerHTML = `<div class="result ${className}">${message}</div>`;
+    }
+
+    function checkPrerequisites() {
+      log('检查前置条件...');
+      
+      const checks = {
+        chrome: navigator.userAgent.includes('Chrome'),
+        extension: !!window.chrome?.runtime,
+        version: getChromeVersion() >= 114,
+        page: !location.href.startsWith('chrome://')
+      };
+
+      let message = '<h4>前置条件检查结果:</h4><ul>';
+      let allPassed = true;
+
+      Object.entries(checks).forEach(([key, passed]) => {
+        const status = passed ? '✅' : '❌';
+        const labels = {
+          chrome: 'Chrome浏览器',
+          extension: '扩展API可用',
+          version: 'Chrome版本 ≥ 114',
+          page: '在普通网页上'
+        };
+        message += `<li>${status} ${labels[key]}</li>`;
+        if (!passed) allPassed = false;
+      });
+
+      message += '</ul>';
+      
+      if (allPassed) {
+        message += '<p class="success">✅ 所有前置条件满足，可以开始测试！</p>';
+      } else {
+        message += '<p class="error">❌ 部分前置条件不满足，请先解决这些问题</p>';
+      }
+
+      showResult('prereq-result', message);
+    }
+
+    function getChromeVersion() {
+      const match = navigator.userAgent.match(/Chrome\/(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    }
+
+    function testBasicFunction() {
+      log('测试基本功能...');
+      
+      if (!window.chrome?.runtime) {
+        showResult('basic-result', '❌ Chrome扩展API不可用', 'error');
+        return;
+      }
+
+      // 尝试发送测试消息
+      chrome.runtime.sendMessage({
+        type: 'debug_test',
+        timestamp: Date.now()
+      }, response => {
+        if (chrome.runtime.lastError) {
+          showResult('basic-result', `❌ 扩展通信失败: ${chrome.runtime.lastError.message}`, 'error');
+        } else {
+          showResult('basic-result', `✅ 扩展通信正常: ${JSON.stringify(response)}`, 'success');
+        }
+      });
+    }
+
+    function runAllTests() {
+      log('运行所有自动化测试...');
+      
+      const tests = [
+        {
+          name: '检查Chrome API',
+          test: () => !!window.chrome?.runtime
+        },
+        {
+          name: '检查侧边栏API',
+          test: () => !!window.chrome?.sidePanel
+        },
+        {
+          name: '检查存储API',
+          test: () => !!window.chrome?.storage
+        },
+        {
+          name: '检查标签页API',
+          test: () => !!window.chrome?.tabs
+        }
+      ];
+
+      let results = '<h4>自动化测试结果:</h4><ul>';
+      let passed = 0;
+
+      tests.forEach(({ name, test }) => {
+        const result = test();
+        const status = result ? '✅' : '❌';
+        results += `<li>${status} ${name}</li>`;
+        if (result) passed++;
+      });
+
+      results += `</ul><p>通过率: ${passed}/${tests.length} (${Math.round(passed/tests.length*100)}%)</p>`;
+
+      if (passed === tests.length) {
+        results += '<p class="success">✅ 所有自动化测试通过！</p>';
+      } else {
+        results += '<p class="warning">⚠️ 部分测试失败，可能影响插件功能</p>';
+      }
+
+      showResult('test-results', results);
+    }
+
+    function openExtensionPage() {
+      window.open('chrome://extensions/', '_blank');
+    }
+
+    function openDiagnostic() {
+      if (window.chrome?.runtime?.id) {
+        const url = `chrome-extension://${chrome.runtime.id}/sidepanel_diagnostic.html`;
+        window.open(url, '_blank');
+      } else {
+        alert('无法获取扩展ID，请手动打开诊断页面');
+      }
+    }
+
+    function showTroubleshooting() {
+      const troubleshootingContent = `
+# 常见问题快速解决
+
+## 问题1: 点击插件图标没反应
+- 确保在腾讯文档页面测试，不是Chrome内部页面
+- 检查Chrome版本是否 ≥ 114
+- 重新加载扩展
+
+## 问题2: 侧边栏打开但空白
+- 检查lib/目录下的依赖文件是否完整
+- 查看侧边栏开发者工具的Console错误
+- 运行checkSidePanelStatus()诊断
+
+## 问题3: 无法提取单元格内容
+- 按F12查看页面Console中的[Content]日志
+- 尝试快捷键Ctrl+Shift+M手动触发
+- 检查是否在正确的腾讯文档页面
+
+更多详情请查看TROUBLESHOOTING.md文件
+      `;
+      
+      const newWindow = window.open('', '_blank');
+      newWindow.document.write(`
+        <html>
+          <head><title>故障排查指南</title></head>
+          <body style="font-family: monospace; padding: 20px; white-space: pre-wrap;">
+            ${troubleshootingContent}
+          </body>
+        </html>
+      `);
+    }
+
+    // 页面加载后自动检查前置条件
+    document.addEventListener('DOMContentLoaded', () => {
+      log('测试页面加载完成');
+      setTimeout(checkPrerequisites, 500);
+    });
+  </script>
+</body>
+</html>

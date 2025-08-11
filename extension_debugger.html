@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome扩展调试器</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #1557b0;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .success {
+            color: #0d7a0d;
+            background: #d1ffd1;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .warning {
+            color: #f57c00;
+            background: #fff3e0;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .info {
+            color: #1976d2;
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .log-output {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 10px 0;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .status-item {
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #1a73e8;
+        }
+        .copy-btn {
+            background: #28a745;
+            float: right;
+            margin-top: -5px;
+        }
+        .copy-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Chrome扩展调试器</h1>
+        
+        <div class="section">
+            <h3>📊 系统信息检查</h3>
+            <button onclick="checkSystemInfo()">检查系统信息</button>
+            <div id="system-info"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔌 Chrome API 检查</h3>
+            <button onclick="checkChromeAPIs()">检查Chrome APIs</button>
+            <div id="api-info"></div>
+        </div>
+
+        <div class="section">
+            <h3>📦 扩展状态检查</h3>
+            <button onclick="checkExtensionStatus()">检查扩展状态</button>
+            <button onclick="testExtensionConnection()">测试扩展连接</button>
+            <div id="extension-info"></div>
+        </div>
+
+        <div class="section">
+            <h3>🎯 侧边栏功能测试</h3>
+            <button onclick="testSidePanelAPI()">测试侧边栏API</button>
+            <button onclick="trySidePanelOpen()">尝试打开侧边栏</button>
+            <div id="sidepanel-info"></div>
+        </div>
+
+        <div class="section">
+            <h3>📋 完整诊断报告</h3>
+            <button onclick="generateFullReport()">生成完整报告</button>
+            <button onclick="copyReport()" class="copy-btn">复制报告</button>
+            <div id="full-report"></div>
+        </div>
+
+        <div class="section">
+            <h3>📝 实时日志</h3>
+            <button onclick="clearLog()">清除日志</button>
+            <div id="log" class="log-output">等待操作...</div>
+        </div>
+    </div>
+
+    <script>
+        let logElement;
+        let fullReportData = {};
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            
+            console.log(logEntry);
+            
+            if (!logElement) {
+                logElement = document.getElementById('log');
+            }
+            
+            logElement.textContent += logEntry + '\n';
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            if (logElement) {
+                logElement.textContent = '';
+            }
+        }
+
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}">${content}</div>`;
+        }
+
+        function checkSystemInfo() {
+            log('开始检查系统信息...');
+            
+            const info = {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                cookieEnabled: navigator.cookieEnabled,
+                onLine: navigator.onLine,
+                chromeVersion: navigator.userAgent.match(/Chrome\/([0-9.]+)/)?.[1] || '未知',
+                url: window.location.href,
+                timestamp: new Date().toISOString()
+            };
+
+            fullReportData.systemInfo = info;
+
+            const content = `
+                <strong>浏览器信息:</strong><br>
+                • Chrome版本: ${info.chromeVersion}<br>
+                • 平台: ${info.platform}<br>
+                • 语言: ${info.language}<br>
+                • 在线状态: ${info.onLine ? '在线' : '离线'}<br>
+                • Cookie启用: ${info.cookieEnabled ? '是' : '否'}<br>
+                • User Agent: ${info.userAgent}
+            `;
+
+            showResult('system-info', content, 'success');
+            log('系统信息检查完成');
+        }
+
+        function checkChromeAPIs() {
+            log('开始检查Chrome APIs...');
+            
+            const apis = {
+                chrome: !!window.chrome,
+                chromeRuntime: !!window.chrome?.runtime,
+                chromeStorage: !!window.chrome?.storage,
+                chromeTabs: !!window.chrome?.tabs,
+                chromeAction: !!window.chrome?.action,
+                chromeSidePanel: !!window.chrome?.sidePanel,
+                chromeScripting: !!window.chrome?.scripting
+            };
+
+            fullReportData.chromeAPIs = apis;
+
+            let content = '<strong>Chrome API 可用性:</strong><br>';
+            for (const [api, available] of Object.entries(apis)) {
+                const status = available ? '✅' : '❌';
+                const color = available ? 'green' : 'red';
+                content += `• ${api}: <span style="color: ${color}">${status}</span><br>`;
+            }
+
+            // 检查具体的Chrome对象属性
+            if (window.chrome) {
+                const chromeProps = Object.getOwnPropertyNames(window.chrome);
+                content += `<br><strong>可用的Chrome属性:</strong><br>${chromeProps.join(', ')}`;
+                fullReportData.chromeProperties = chromeProps;
+            }
+
+            const type = apis.chrome ? 'success' : 'error';
+            showResult('api-info', content, type);
+            log('Chrome APIs检查完成');
+        }
+
+        function checkExtensionStatus() {
+            log('开始检查扩展状态...');
+            
+            if (!window.chrome?.runtime) {
+                showResult('extension-info', '❌ Chrome扩展API不可用', 'error');
+                log('Chrome扩展API不可用');
+                return;
+            }
+
+            try {
+                const extensionId = chrome.runtime.id;
+                const manifest = chrome.runtime.getManifest ? chrome.runtime.getManifest() : null;
+                
+                const info = {
+                    extensionId: extensionId,
+                    manifest: manifest,
+                    lastError: chrome.runtime.lastError?.message || '无'
+                };
+
+                fullReportData.extensionInfo = info;
+
+                let content = `
+                    <strong>扩展信息:</strong><br>
+                    • 扩展ID: ${extensionId || '未知'}<br>
+                    • 最后错误: ${info.lastError}<br>
+                `;
+
+                if (manifest) {
+                    content += `
+                        • 扩展名称: ${manifest.name}<br>
+                        • 版本: ${manifest.version}<br>
+                        • Manifest版本: ${manifest.manifest_version}<br>
+                        • 权限: ${manifest.permissions?.join(', ') || '无'}<br>
+                    `;
+                }
+
+                showResult('extension-info', content, 'success');
+                log('扩展状态检查完成');
+            } catch (error) {
+                const errorMsg = `扩展状态检查失败: ${error.message}`;
+                showResult('extension-info', `❌ ${errorMsg}`, 'error');
+                log(errorMsg);
+                fullReportData.extensionError = error.message;
+            }
+        }
+
+        function testExtensionConnection() {
+            log('测试扩展连接...');
+            
+            if (!window.chrome?.runtime) {
+                showResult('extension-info', '❌ Chrome扩展API不可用，无法测试连接', 'error');
+                return;
+            }
+
+            try {
+                chrome.runtime.sendMessage({ 
+                    type: 'debug_test',
+                    timestamp: Date.now()
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        const error = chrome.runtime.lastError.message;
+                        showResult('extension-info', `❌ 连接测试失败: ${error}`, 'error');
+                        log(`连接测试失败: ${error}`);
+                        fullReportData.connectionError = error;
+                    } else {
+                        showResult('extension-info', `✅ 连接测试成功: ${JSON.stringify(response)}`, 'success');
+                        log('连接测试成功');
+                        fullReportData.connectionSuccess = response;
+                    }
+                });
+            } catch (error) {
+                const errorMsg = `连接测试异常: ${error.message}`;
+                showResult('extension-info', `❌ ${errorMsg}`, 'error');
+                log(errorMsg);
+                fullReportData.connectionException = error.message;
+            }
+        }
+
+        function testSidePanelAPI() {
+            log('测试侧边栏API...');
+            
+            const sidePanelAPI = {
+                available: !!window.chrome?.sidePanel,
+                methods: []
+            };
+
+            if (window.chrome?.sidePanel) {
+                sidePanelAPI.methods = Object.getOwnPropertyNames(window.chrome.sidePanel);
+                
+                const content = `
+                    ✅ <strong>侧边栏API可用</strong><br>
+                    • 可用方法: ${sidePanelAPI.methods.join(', ')}<br>
+                    • API对象: ${typeof window.chrome.sidePanel}
+                `;
+                showResult('sidepanel-info', content, 'success');
+                log('侧边栏API检查通过');
+            } else {
+                const content = `
+                    ❌ <strong>侧边栏API不可用</strong><br>
+                    这可能是因为:<br>
+                    • Chrome版本过低 (需要114+)<br>
+                    • 扩展未正确加载<br>
+                    • 权限配置问题
+                `;
+                showResult('sidepanel-info', content, 'error');
+                log('侧边栏API不可用');
+            }
+
+            fullReportData.sidePanelAPI = sidePanelAPI;
+        }
+
+        function trySidePanelOpen() {
+            log('尝试打开侧边栏...');
+            
+            if (!window.chrome?.sidePanel) {
+                showResult('sidepanel-info', '❌ 侧边栏API不可用', 'error');
+                return;
+            }
+
+            // 注意：在网页中无法直接调用chrome.sidePanel.open()
+            // 这需要在扩展的背景脚本中执行
+            showResult('sidepanel-info', `
+                ⚠️ <strong>无法从网页直接打开侧边栏</strong><br>
+                侧边栏只能通过以下方式打开:<br>
+                • 点击扩展图标<br>
+                • 使用keyboard快捷键<br>
+                • 在背景脚本中调用API<br><br>
+                请尝试点击浏览器工具栏中的扩展图标
+            `, 'warning');
+            log('侧边栏打开说明已显示');
+        }
+
+        function generateFullReport() {
+            log('生成完整诊断报告...');
+            
+            // 执行所有检查
+            checkSystemInfo();
+            setTimeout(() => {
+                checkChromeAPIs();
+                setTimeout(() => {
+                    checkExtensionStatus();
+                    setTimeout(() => {
+                        testSidePanelAPI();
+                        setTimeout(() => {
+                            displayFullReport();
+                        }, 500);
+                    }, 500);
+                }, 500);
+            }, 500);
+        }
+
+        function displayFullReport() {
+            const report = JSON.stringify(fullReportData, null, 2);
+            const reportElement = document.getElementById('full-report');
+            
+            reportElement.innerHTML = `
+                <div class="info">
+                    <strong>诊断报告已生成</strong><br>
+                    报告时间: ${new Date().toLocaleString()}<br>
+                    数据完整性: ${Object.keys(fullReportData).length} 项检查完成
+                </div>
+                <div class="log-output">${report}</div>
+            `;
+            
+            log('完整诊断报告生成完成');
+        }
+
+        function copyReport() {
+            const reportText = JSON.stringify(fullReportData, null, 2);
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(reportText).then(() => {
+                    log('报告已复制到剪贴板');
+                    alert('诊断报告已复制到剪贴板！');
+                }).catch(err => {
+                    log(`复制失败: ${err.message}`);
+                    fallbackCopy(reportText);
+                });
+            } else {
+                fallbackCopy(reportText);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                log('报告已复制到剪贴板 (fallback)');
+                alert('诊断报告已复制到剪贴板！');
+            } catch (err) {
+                log(`复制失败: ${err.message}`);
+                alert('复制失败，请手动复制报告内容');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // 页面加载完成后自动初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            logElement = document.getElementById('log');
+            log('Chrome扩展调试器已加载');
+            log('请点击相应按钮开始检查...');
+        });
+    </script>
+</body>
+</html>

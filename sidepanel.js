@@ -16,6 +16,16 @@ let currentViewMode = 'rendered'; // 'rendered' 或 'source'
 
 // 初始化DOM元素引用
 function initializeDOMReferences() {
+  console.log('🔍 开始初始化DOM元素引用...');
+  
+  // 首先检查文档状态
+  console.log('📄 文档状态:', {
+    readyState: document.readyState,
+    body: !!document.body,
+    head: !!document.head,
+    documentElement: !!document.documentElement
+  });
+  
   markdownOutput = document.getElementById('markdown-output');
   timestampElement = document.getElementById('timestamp');
   contentInfoElement = document.getElementById('content-info');
@@ -36,12 +46,25 @@ function initializeDOMReferences() {
     copyButton, viewModeButton, pinButton
   };
   
+  // 详细记录每个元素的状态
+  console.log('🔎 DOM元素检查详情:');
+  Object.entries(requiredElements).forEach(([name, element]) => {
+    const status = element ? '✅' : '❌';
+    console.log(`  ${status} ${name}:`, element ? 'found' : 'NOT FOUND');
+  });
+  
   const missingElements = Object.entries(requiredElements)
     .filter(([name, element]) => !element)
     .map(([name]) => name);
   
   if (missingElements.length > 0) {
     console.error('❌ 以下DOM元素未找到:', missingElements);
+    console.error('💡 请检查sidepanel.html中是否包含这些元素的ID');
+    
+    // 尝试列出所有现有的带ID的元素
+    const allElementsWithId = Array.from(document.querySelectorAll('[id]')).map(el => el.id);
+    console.log('📝 页面中所有带ID的元素:', allElementsWithId);
+    
     return false;
   }
   
@@ -1031,8 +1054,23 @@ function initializeSidePanel() {
   });
   
   // 通知背景脚本侧边栏已初始化
+  console.log('📡 准备向背景脚本发送初始化消息...');
+  logMessage('sidepanel', '准备发送侧边栏初始化消息到背景脚本');
+  
   chrome.runtime.sendMessage({ type: 'sidePanel_initialized' }, function(response) {
+    console.log('✅ 背景脚本响应:', response);
     logMessage('sidepanel', `背景脚本响应初始化: ${JSON.stringify(response)}`);
+    
+    if (chrome.runtime.lastError) {
+      console.error('❌ 消息发送错误:', chrome.runtime.lastError);
+      logMessage('error', `消息发送错误: ${chrome.runtime.lastError.message}`);
+    }
+  }).then(response => {
+    console.log('✅ 背景脚本响应:', response);
+    logMessage('sidepanel', '成功通知背景脚本侧边栏已初始化');
+  }).catch(error => {
+    console.warn('⚠️ 背景脚本通信失败:', error.message);
+    logMessage('warning', `背景脚本通信失败: ${error.message}`);
   });
 }
 
@@ -1150,10 +1188,33 @@ function setupEventListeners() {
 // 初始化markdown-it配置
 function initializeMarkdownIt() {
   try {
+    console.log('🔧 开始初始化markdown-it...');
+    
+    // 检查所有依赖库的加载状态
+    const dependencies = {
+      markdownit: typeof markdownit !== 'undefined',
+      DOMPurify: typeof DOMPurify !== 'undefined',
+      mermaid: typeof mermaid !== 'undefined'
+    };
+    
+    console.log('📚 依赖库加载状态:', dependencies);
+    
     // 检查markdown-it是否可用
-    if (typeof markdownit === 'undefined') {
-      logMessage('error', 'markdown-it 未加载');
-      return;
+    if (!dependencies.markdownit) {
+      const errorMsg = 'markdown-it 未加载 - 检查lib/markdown-it.min.js是否正确引入';
+      console.error('❌', errorMsg);
+      logMessage('error', errorMsg);
+      return false;
+    }
+    
+    if (!dependencies.DOMPurify) {
+      console.warn('⚠️ DOMPurify 未加载 - HTML清理功能将不可用');
+      logMessage('warning', 'DOMPurify 未加载');
+    }
+    
+    if (!dependencies.mermaid) {
+      console.warn('⚠️ Mermaid 未加载 - 图表渲染功能将不可用');
+      logMessage('warning', 'Mermaid 未加载');
     }
     
     // 创建markdown-it实例，优化配置以支持腾讯文档的内容格式
@@ -1312,33 +1373,177 @@ function testContentTableDetection(content) {
   logMessage('sidepanel', '=== 内容表格检测测试完成 ===');
 }
 
+// 检查侧边栏状态的诊断函数
+function checkSidePanelStatus() {
+  console.log('🔍 ===== 侧边栏状态诊断 =====');
+  
+  const status = {
+    timestamp: new Date().toLocaleString(),
+    domStatus: {},
+    libraryStatus: {},
+    extensionStatus: {},
+    configStatus: {}
+  };
+  
+  // 检查DOM元素
+  const domElements = [
+    'markdown-output', 'timestamp', 'content-info', 'log-messages', 
+    'debug-console', 'refresh-btn', 'toggle-log-btn', 'clear-log-btn',
+    'copy-log-btn', 'copy-btn', 'view-mode-btn', 'pin-btn'
+  ];
+  
+  domElements.forEach(id => {
+    status.domStatus[id] = !!document.getElementById(id);
+  });
+  
+  // 检查依赖库
+  status.libraryStatus = {
+    markdownit: typeof markdownit !== 'undefined',
+    DOMPurify: typeof DOMPurify !== 'undefined', 
+    mermaid: typeof mermaid !== 'undefined'
+  };
+  
+  // 检查扩展API
+  status.extensionStatus = {
+    chrome: !!window.chrome,
+    chromeRuntime: !!window.chrome?.runtime,
+    chromeStorage: !!window.chrome?.storage
+  };
+  
+  // 检查全局状态
+  status.configStatus = {
+    debug: debug,
+    isPinned: isPinned,
+    isAccessibilityModeEnabled: isAccessibilityModeEnabled,
+    currentViewMode: currentViewMode,
+    mdInstance: !!window.md
+  };
+  
+  console.log('📊 诊断结果:', status);
+  
+  // 输出问题总结
+  const issues = [];
+  
+  Object.entries(status.domStatus).forEach(([id, found]) => {
+    if (!found) issues.push(`DOM元素缺失: ${id}`);
+  });
+  
+  Object.entries(status.libraryStatus).forEach(([lib, loaded]) => {
+    if (!loaded) issues.push(`依赖库未加载: ${lib}`);
+  });
+  
+  Object.entries(status.extensionStatus).forEach(([api, available]) => {
+    if (!available) issues.push(`Chrome API不可用: ${api}`);
+  });
+  
+  if (issues.length > 0) {
+    console.warn('⚠️ 发现问题:', issues);
+  } else {
+    console.log('✅ 所有检查通过，侧边栏状态正常');
+  }
+  
+  // 如果日志区域可用，也写到日志中
+  if (status.domStatus['log-messages']) {
+    logMessage('diagnostic', `状态检查完成，发现 ${issues.length} 个问题`);
+    issues.forEach(issue => logMessage('diagnostic', `❌ ${issue}`));
+  }
+  
+  return status;
+}
+
 // 启动侧边栏
 function start() {
+  console.log('🚀 开始启动侧边栏...');
+  console.log('⏰ 启动时间:', new Date().toLocaleString());
+  
   try {
+    // 检查基本环境
+    console.log('🌍 运行环境检查:', {
+      userAgent: navigator.userAgent,
+      url: location.href,
+      chrome: !!window.chrome,
+      chromeRuntime: !!window.chrome?.runtime
+    });
+    
     // 首先初始化DOM元素引用
+    console.log('📝 步骤1: 初始化DOM元素引用');
     if (!initializeDOMReferences()) {
-      throw new Error('DOM元素初始化失败');
+      throw new Error('DOM元素初始化失败 - 请检查sidepanel.html文件');
     }
+    console.log('✅ DOM元素初始化成功');
     
     // 初始化markdown-it
-    initializeMarkdownIt();
+    console.log('📝 步骤2: 初始化markdown-it');
+    const markdownInitSuccess = initializeMarkdownIt();
+    if (markdownInitSuccess === false) {
+      throw new Error('markdown-it初始化失败 - 请检查依赖库加载');
+    }
+    console.log('✅ markdown-it初始化成功');
     
     // 设置事件监听器
+    console.log('📝 步骤3: 设置事件监听器');
     setupEventListeners();
+    console.log('✅ 事件监听器设置成功');
     
     // 初始化侧边栏
+    console.log('📝 步骤4: 初始化侧边栏状态');
     initializeSidePanel();
+    console.log('✅ 侧边栏状态初始化成功');
     
     // 添加表格测试到全局作用域供调试使用
+    console.log('📝 步骤5: 添加调试函数');
     window.testTableRendering = testTableRendering;
     window.testContentTableDetection = testContentTableDetection;
     window.testContentPreprocessing = testTableCleaning;
     window.debugCurrentContent = debugCurrentContent;
-    logMessage('sidepanel', '添加了全局调试函数: window.testTableRendering(), window.testContentTableDetection(), window.testContentPreprocessing(), window.debugCurrentContent()');
+    window.checkSidePanelStatus = checkSidePanelStatus; // 新增状态检查函数
+    
+    const debugFunctions = [
+      'testTableRendering()', 
+      'testContentTableDetection()', 
+      'testContentPreprocessing()', 
+      'debugCurrentContent()',
+      'checkSidePanelStatus()'
+    ];
+    console.log('🛠️ 可用调试函数:', debugFunctions);
+    logMessage('sidepanel', `添加了全局调试函数: ${debugFunctions.join(', ')}`);
+    
+    // 通知背景脚本侧边栏已初始化
+    console.log('📝 步骤6: 通知背景脚本');
+    chrome.runtime.sendMessage({
+      type: 'sidePanel_initialized'
+    }).then(response => {
+      console.log('✅ 背景脚本响应:', response);
+      logMessage('sidepanel', '成功通知背景脚本侧边栏已初始化');
+    }).catch(error => {
+      console.warn('⚠️ 背景脚本通信失败:', error.message);
+      logMessage('warning', `背景脚本通信失败: ${error.message}`);
+    });
+    
+    console.log('🎉 侧边栏启动完成!');
+    logMessage('sidepanel', '侧边栏启动完成，所有功能已就绪');
+    
   } catch (error) {
-    console.error('侧边栏启动错误:', error);
+    console.error('💥 侧边栏启动错误:', error);
+    console.error('📍 错误堆栈:', error.stack);
+    
     if (markdownOutput) {
       showError(`侧边栏启动失败: ${error.message}`);
+    } else {
+      // 如果连markdownOutput都没有，直接在body中显示错误
+      document.body.innerHTML = `
+        <div style="padding: 20px; color: red; font-family: monospace;">
+          <h2>❌ 侧边栏启动失败</h2>
+          <p><strong>错误信息:</strong> ${error.message}</p>
+          <p><strong>建议解决方案:</strong></p>
+          <ul>
+            <li>检查sidepanel.html文件是否完整</li>
+            <li>检查lib/目录下的依赖库是否存在</li>
+            <li>重新加载扩展后再试</li>
+          </ul>
+          <button onclick="location.reload()">重新加载页面</button>
+        </div>
+      `;
     }
   }
 }
@@ -2175,4 +2380,24 @@ function toggleAllMarkdown(expand) {
 }
 
 // 等待DOM完全加载后启动
-document.addEventListener('DOMContentLoaded', start); 
+document.addEventListener('DOMContentLoaded', start);
+
+// 监听页面关闭事件，通知背景脚本侧边栏已关闭
+window.addEventListener('beforeunload', function() {
+  try {
+    chrome.runtime.sendMessage({ type: 'sidePanel_closed' });
+  } catch (error) {
+    // 忽略错误，可能在扩展卸载时发生
+  }
+});
+
+// 监听页面隐藏事件（用户切换标签页或关闭侧边栏）
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    try {
+      chrome.runtime.sendMessage({ type: 'sidePanel_closed' });
+    } catch (error) {
+      // 忽略错误
+    }
+  }
+}); 
