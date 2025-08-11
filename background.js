@@ -60,24 +60,19 @@ function handleSidePanelError(error, tab, startTime) {
   
   // 针对性的错误处理
   if (error.message.includes('No active side panel')) {
-    logMessage('🔧 检测到侧边栏状态问题，尝试重新启用...');
+    logMessage('🔧 检测到侧边栏状态问题，重新设置配置...');
     
-    // 重新设置侧边栏配置并立即尝试打开
+    // 只重新设置配置，不自动重试打开（避免用户手势问题）
     chrome.sidePanel.setOptions({
       tabId: tab.id,
       enabled: true,
       path: 'sidepanel.html'
     }).then(() => {
-      logMessage('✅ 标签页侧边栏状态已重置');
-      logMessage('🚀 自动重试打开侧边栏...');
-      
-      // 立即重试打开侧边栏
-      return chrome.sidePanel.open({ tabId: tab.id });
-    }).then(() => {
-      logMessage('✅ 侧边栏重试打开成功！');
-    }).catch(retryErr => {
-      logMessage(`❌ 重试失败: ${retryErr.message}`);
-      logMessage('💡 建议: 请手动重新点击插件图标，或重新加载扩展');
+      logMessage('✅ 标签页侧边栏配置已重置');
+      logMessage('💡 建议: 请重新点击插件图标尝试');
+    }).catch(configErr => {
+      logMessage(`❌ 配置重置失败: ${configErr.message}`);
+      logMessage('💡 建议: 请重新加载扩展后再试');
     });
   } else if (error.message.includes('user gesture')) {
     logMessage('⚠️ 用户手势上下文已丢失（这不应该发生在简化后的代码中）');
@@ -144,21 +139,25 @@ chrome.action.onClicked.addListener((tab) => {
     
     const startTime = Date.now();
     
-    // 在打开前先检查并确保侧边栏已启用
-    chrome.sidePanel.setOptions({
-      tabId: tab.id,
-      enabled: true,
-      path: 'sidepanel.html'
-    }).then(() => {
-      console.log('✅ 侧边栏选项设置成功，准备打开...');
-      logMessage(`✅ 标签页 ${tab.id} 侧边栏选项设置成功`);
-      
-      // 直接打开侧边栏，保持用户手势上下文
-      return chrome.sidePanel.open({ tabId: tab.id });
-    }).then(() => {
+    // 🔑 关键修复：在用户手势同步调用栈中直接打开侧边栏
+    // 不使用异步 Promise 链，确保不丢失用户手势上下文
+    chrome.sidePanel.open({ tabId: tab.id }).then(() => {
       const duration = Date.now() - startTime;
       console.log(`✅ 侧边栏打开成功 (耗时: ${duration}ms)`);
       logMessage(`✅ 为标签页 ${tab.id} 成功打开侧边栏 (耗时: ${duration}ms)`);
+      
+      // 侧边栏打开成功后，确保配置正确（这个操作不需要用户手势）
+      chrome.sidePanel.setOptions({
+        tabId: tab.id,
+        enabled: true,
+        path: 'sidepanel.html'
+      }).then(() => {
+        console.log('✅ 侧边栏配置已确认');
+        logMessage(`✅ 标签页 ${tab.id} 侧边栏配置已确认`);
+      }).catch(configError => {
+        console.warn('⚠️ 侧边栏配置确认失败:', configError.message);
+        logMessage(`⚠️ 侧边栏配置确认失败: ${configError.message}`);
+      });
       
       // 等待一段时间后检查侧边栏是否真的初始化了
       setTimeout(() => {
@@ -529,13 +528,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         logMessage(`设置侧边栏状态错误: ${err.message}`);
       }
     } else {
-      // 如果是有效页面，确保侧边栏可用
+      // 如果是有效页面，确保侧边栏可用并配置正确
       try {
         chrome.sidePanel.setOptions({
           tabId: tabId,
-          enabled: true
+          enabled: true,
+          path: 'sidepanel.html'
         });
-        logMessage(`标签页 ${tabId} 导航到腾讯文档 sheet 模式页面，启用侧边栏`);
+        logMessage(`标签页 ${tabId} 导航到腾讯文档 sheet 模式页面，启用侧边栏并配置完成`);
       } catch (err) {
         logMessage(`启用侧边栏错误: ${err.message}`);
       }
@@ -569,7 +569,8 @@ chrome.runtime.onInstalled.addListener(() => {
           tabs.forEach(tab => {
             chrome.sidePanel.setOptions({
               tabId: tab.id,
-              enabled: true
+              enabled: true,
+              path: 'sidepanel.html'
             }).catch(err => {
               logMessage(`启用标签页 ${tab.id} 侧边栏失败: ${err.message}`);
             });
