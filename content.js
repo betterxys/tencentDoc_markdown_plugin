@@ -85,6 +85,8 @@ let keydownHandler = null;
 let mousedownHandler = null;
 let mutationObserver = null;
 let lastProcessedContent = ''; // 避免重复处理相同内容
+let lastProcessedTimestamp = 0; // 记录上次处理时间
+let lastClickedElement = null; // 记录上次点击的元素
 
 // 错误处理类
 class ErrorHandler {
@@ -1038,8 +1040,8 @@ function handleClick(event) {
     
     if (isTableCell) {
       logMessage("使用防抖处理表格单元格点击");
-      // 使用防抖处理
-      debouncedProcessCell();
+      // 使用防抖处理，传递targetElement参数
+      debouncedProcessCell(targetElement);
       return;
     }
     
@@ -1048,7 +1050,7 @@ function handleClick(event) {
     if (!cell) {
       logMessage("未能找到有效的单元格或文本区域");
       logMessage("尝试直接处理表格单元格内容");
-      processTableCellContent();
+      processTableCellContent(targetElement);
       return;
     }
     
@@ -1059,7 +1061,7 @@ function handleClick(event) {
     logMessage(`提取到的内容长度: ${content ? content.length : 0}`);
     
     // 处理提取的内容
-    processExtractedContent(content);
+    processExtractedContent(content, targetElement);
     
   } catch (error) {
     ErrorHandler.handle(error, 'handleClick');
@@ -1067,7 +1069,7 @@ function handleClick(event) {
 }
 
 // 处理提取的内容
-function processExtractedContent(content) {
+function processExtractedContent(content, targetElement = null) {
   let cleanedContent = content?.trim() || '';
   
   if (!cleanedContent) {
@@ -1075,11 +1077,46 @@ function processExtractedContent(content) {
     return;
   }
   
-  // 避免重复处理相同内容
-  if (cleanedContent === lastProcessedContent) {
-    logMessage("内容与上次相同，跳过处理");
+  // 改进的重复内容检测逻辑
+  const currentTimestamp = Date.now();
+  const timeSinceLastProcess = currentTimestamp - lastProcessedTimestamp;
+  
+  // 获取点击元素，如果没有传入targetElement则尝试获取当前活动元素
+  let clickedElement = null;
+  if (targetElement) {
+    clickedElement = getCellOrTextArea(targetElement);
+  } else {
+    // 尝试获取当前活动的单元格
+    clickedElement = document.activeElement;
+  }
+  
+  // 检查是否为快速重复点击同一元素（500ms内）
+  const isSameElementQuickClick = lastClickedElement === clickedElement && timeSinceLastProcess < 500;
+  
+  // 检查是否为相同内容且相同元素的较短时间间隔重复处理
+  const isSameContentSameElement = cleanedContent === lastProcessedContent && 
+                                  lastClickedElement === clickedElement && 
+                                  timeSinceLastProcess < 2000;
+  
+  if (isSameElementQuickClick) {
+    logMessage(`快速重复点击同一元素(${timeSinceLastProcess}ms)，跳过处理`);
     return;
   }
+  
+  if (isSameContentSameElement) {
+    logMessage(`相同元素的相同内容且时间间隔较短(${timeSinceLastProcess}ms)，跳过处理`);
+    return;
+  }
+  
+  // 如果是不同元素但相同内容，允许处理（用户可能想查看不同位置的相同内容）
+  if (cleanedContent === lastProcessedContent && lastClickedElement !== clickedElement) {
+    logMessage(`不同元素的相同内容，允许处理`);
+  }
+  
+  // 更新处理记录
+  lastProcessedContent = cleanedContent;
+  lastProcessedTimestamp = currentTimestamp;
+  lastClickedElement = clickedElement;
   
   // 检测内容类型（添加详细调试信息）
   const contentType = MarkdownDetector.getContentType(cleanedContent);
@@ -1122,11 +1159,9 @@ function processExtractedContent(content) {
     finalContentType === 'code' ||
     finalContentType === 'table' ||
     cleanedContent.length > 50 ||
-    (finalContentType === 'text' && cleanedContent.length >= 3); // 处理普通文本内容，最少3个字符
+    (finalContentType === 'text' && cleanedContent.length >= 1); // 处理普通文本内容，包括单个字符
   
   if (shouldProcess) {
-    lastProcessedContent = cleanedContent;
-    
     logMessage(`✅ 决定处理内容 (类型: ${finalContentType}, 长度: ${cleanedContent.length})`);
     logMessage(`处理内容: ${cleanedContent.substring(0, 50)}${cleanedContent.length > 50 ? '...' : ''}`);
     
@@ -1160,7 +1195,7 @@ function sendContentToBackground(content, contentType) {
 }
 
 // 处理腾讯文档表格单元格内容
-function processTableCellContent() {
+function processTableCellContent(targetElement = null) {
   logMessage("尝试处理表格单元格内容");
   
   try {
@@ -1287,7 +1322,7 @@ function processTableCellContent() {
   
     // 如果找到了内容，处理它
     if (content) {
-      processExtractedContent(content);
+      processExtractedContent(content, targetElement);
     } else {
       logMessage("未能提取表格单元格内容");
     }
@@ -1610,7 +1645,7 @@ function initialize() {
     if (tableElement) {
       // 在点击后延迟一段时间，等待DOM更新
       setTimeout(() => {
-        processTableCellContent();
+        processTableCellContent(e.target);
       }, 300);
     }
   };

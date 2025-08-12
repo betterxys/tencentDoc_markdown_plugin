@@ -300,16 +300,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     
     // 检查是否有存储的 Markdown 内容
-    chrome.storage.local.get(['lastMarkdownContent', 'timestamp', 'accessibilityMode', 'isPinned'], function(data) {
+    chrome.storage.local.get(['lastMarkdownContent', 'timestamp', 'accessibilityMode'], function(data) {
       // 恢复无障碍模式设置
       if (data.accessibilityMode !== undefined) {
         accessibilityMode = data.accessibilityMode;
         logMessage(`恢复无障碍模式设置: ${accessibilityMode ? '启用' : '禁用'}`);
       }
-      
-      // 记录置顶状态
-      const isPinned = data.isPinned !== undefined ? data.isPinned : true;
-      logMessage(`当前置顶状态: ${isPinned ? '开启' : '关闭'}`);
       
       if (data.lastMarkdownContent) {
         logMessage(`加载存储的 Markdown 内容 (${data.timestamp})`);
@@ -465,36 +461,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       logMessage('内容已保存到存储中');
     });
     
-    // 检查置顶状态，决定是否打开侧边栏和渲染内容
-    chrome.storage.local.get(['isPinned'], function(data) {
-      const isPinned = data.isPinned !== undefined ? data.isPinned : true; // 默认开启
+    // 默认自动渲染内容到侧边栏（如果已打开）
+    if (sender.tab) {
+      logMessage(`🚀 准备发送内容到侧边栏 (类型: ${contentType}, 长度: ${content.length})`);
       
-      if (isPinned && sender.tab) {
-        // 置顶开启时，发送内容到侧边栏（如果已打开）
-        // 注意：不能在非用户手势的上下文中调用 sidePanel.open()
-        // 用户需要手动点击插件图标打开侧边栏
-        logMessage(`🚀 准备发送内容到侧边栏 (类型: ${contentType}, 长度: ${content.length})`);
-        
-        if (isSidePanelActive()) {
-          safeSendToSidePanel({
-            type: 'render_markdown',
-            content: content,
-            contentType: contentType,
-            timestamp: timestamp,
-            accessibilityMode: accessibilityMode
-          }).then(response => {
-            logMessage(`✅ 侧边栏响应: ${JSON.stringify(response)}`);
-          }).catch(err => {
-            logMessage(`❌ 发送到侧边栏失败: ${err.message}`);
-          });
-        } else {
-          logMessage('侧边栏未激活，请点击插件图标打开侧边栏');
-        }
+      if (isSidePanelActive()) {
+        safeSendToSidePanel({
+          type: 'render_markdown',
+          content: content,
+          contentType: contentType,
+          timestamp: timestamp,
+          accessibilityMode: accessibilityMode
+        }).then(response => {
+          logMessage(`✅ 侧边栏响应: ${JSON.stringify(response)}`);
+        }).catch(err => {
+          logMessage(`❌ 发送到侧边栏失败: ${err.message}`);
+        });
       } else {
-        // 置顶关闭时，只存储内容不发送到侧边栏
-        logMessage('置顶状态关闭，仅存储内容');
+        logMessage('侧边栏未激活，请点击插件图标打开侧边栏');
       }
-    });
+    }
     
     sendResponse({ status: 'received' });
     return true;

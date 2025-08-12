@@ -4,12 +4,11 @@ const debug = true;
 
 // DOM 元素引用 - 将在DOM加载完成后初始化
 let markdownOutput, timestampElement, contentInfoElement, logMessages, debugConsole;
-let refreshButton, toggleLogButton, clearLogButton, copyLogButton, copyButton, viewModeButton, pinButton;
+let refreshButton, toggleLogButton, clearLogButton, copyLogButton, copyButton, viewModeButton;
 
 // 状态变量
 let isDebugVisible = false;
 let isAccessibilityModeEnabled = false;
-let isPinned = true; // 默认开启置顶状态
 let currentContent = ''; // 存储当前内容用于复制
 let currentContentType = 'text'; // 存储当前内容类型
 let currentViewMode = 'rendered'; // 'rendered' 或 'source'
@@ -37,13 +36,12 @@ function initializeDOMReferences() {
   copyLogButton = document.getElementById('copy-log-btn');
   copyButton = document.getElementById('copy-btn');
   viewModeButton = document.getElementById('view-mode-btn');
-  pinButton = document.getElementById('pin-btn');
   
   // 验证所有重要元素都找到了
   const requiredElements = {
     markdownOutput, timestampElement, contentInfoElement, logMessages, debugConsole,
     refreshButton, toggleLogButton, clearLogButton, copyLogButton, 
-    copyButton, viewModeButton, pinButton
+    copyButton, viewModeButton
   };
   
   // 详细记录每个元素的状态
@@ -113,45 +111,6 @@ function logMessage(source, message) {
   }
 }
 
-// 切换置顶状态
-function togglePinStatus() {
-  isPinned = !isPinned;
-  
-  // 更新按钮样式
-  if (isPinned) {
-    pinButton.classList.add('pinned');
-    markdownOutput.classList.remove('hidden');
-    logMessage('sidepanel', '置顶状态开启，markdown区域展开');
-    
-    // 通知背景脚本恢复监听
-    chrome.runtime.sendMessage({
-      type: 'start_listening'
-    }).then(response => {
-      logMessage('sidepanel', `内容脚本监听已恢复: ${JSON.stringify(response)}`);
-    }).catch(err => {
-      logMessage('sidepanel', `恢复内容脚本监听失败: ${err.message}`);
-    });
-  } else {
-    pinButton.classList.remove('pinned');
-    markdownOutput.classList.add('hidden');
-    logMessage('sidepanel', '置顶状态关闭，markdown区域收起');
-    
-    // 立即通知背景脚本关闭侧边栏
-    logMessage('sidepanel', '准备发送关闭侧边栏请求');
-    chrome.runtime.sendMessage({
-      type: 'close_sidepanel'
-    }).then(response => {
-      logMessage('sidepanel', `关闭侧边栏请求已发送，响应: ${JSON.stringify(response)}`);
-    }).catch(err => {
-      logMessage('sidepanel', `通知关闭侧边栏失败: ${err.message}`);
-    });
-  }
-  
-  // 保存状态到chrome.storage
-  chrome.storage.local.set({ isPinned: isPinned }, () => {
-    logMessage('sidepanel', `置顶状态已保存: ${isPinned}`);
-  });
-}
 
 // 设置无障碍模式
 function setAccessibilityMode(enabled) {
@@ -704,10 +663,6 @@ function renderContent(content, contentType) {
         applyAccessibilityStyles();
       }
       
-      // 检查置顶状态，如果置顶关闭则保持隐藏
-      if (!isPinned) {
-        markdownOutput.classList.add('hidden');
-      }
       
       // 渲染完成后处理 Mermaid 图表
       processMermaidDiagrams();
@@ -1026,27 +981,16 @@ function initializeSidePanel() {
   debugConsole.classList.add('hidden');
   
   // 从 chrome.storage.local 获取最后的内容和设置
-  chrome.storage.local.get(['lastMarkdownContent', 'contentType', 'timestamp', 'accessibilityMode', 'isPinned'], function(data) {
-    // 设置置顶状态
-    if (data.isPinned !== undefined) {
-      isPinned = data.isPinned;
-    }
-    
-    // 更新置顶按钮状态
-    if (isPinned) {
-      pinButton.classList.add('pinned');
-      markdownOutput.classList.remove('hidden');
-    } else {
-      pinButton.classList.remove('pinned');
-      markdownOutput.classList.add('hidden');
-    }
-    
+  chrome.storage.local.get(['lastMarkdownContent', 'contentType', 'timestamp', 'accessibilityMode'], function(data) {
     // 设置无障碍模式
     if (data.accessibilityMode !== undefined) {
       setAccessibilityMode(data.accessibilityMode);
     }
     
-    if (data.lastMarkdownContent && isPinned) {
+    // 默认展示markdown区域
+    markdownOutput.classList.remove('hidden');
+    
+    if (data.lastMarkdownContent) {
       logMessage('sidepanel', `从存储中加载上次的内容 (${data.timestamp})`);
       logMessage('sidepanel', `内容类型: ${data.contentType || 'unknown'}, 长度: ${data.lastMarkdownContent.length}`);
       renderMarkdown(data.lastMarkdownContent, data.timestamp, undefined, data.contentType || 'text');
@@ -1124,9 +1068,6 @@ function setupEventListeners() {
     viewModeButton.addEventListener('click', toggleViewMode);
   }
   
-  if (pinButton) {
-    pinButton.addEventListener('click', togglePinStatus);
-  }
   
   // JSON + Markdown 交互事件委托
   if (markdownOutput) {
@@ -1389,7 +1330,7 @@ function checkSidePanelStatus() {
   const domElements = [
     'markdown-output', 'timestamp', 'content-info', 'log-messages', 
     'debug-console', 'refresh-btn', 'toggle-log-btn', 'clear-log-btn',
-    'copy-log-btn', 'copy-btn', 'view-mode-btn', 'pin-btn'
+    'copy-log-btn', 'copy-btn', 'view-mode-btn'
   ];
   
   domElements.forEach(id => {
@@ -1413,7 +1354,6 @@ function checkSidePanelStatus() {
   // 检查全局状态
   status.configStatus = {
     debug: debug,
-    isPinned: isPinned,
     isAccessibilityModeEnabled: isAccessibilityModeEnabled,
     currentViewMode: currentViewMode,
     mdInstance: !!window.md
@@ -2291,12 +2231,28 @@ function renderTableContent(content) {
 function renderTextContent(content, contentType) {
   const escapedContent = escapeHtml(content);
   
-  // 为长文本添加更好的样式
-  const isLongText = content.length > 100;
-  const className = isLongText ? 'text-content long-text' : 'text-content';
+  // 计算内容统计信息
+  const lineCount = content.split('\n').length;
+  const charCount = content.length;
+  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const isLongText = content.length > 300;
+  
+  // 统一使用改进后的样式
+  const className = 'text-content';
+  
+  // 为长文本添加内容信息头部
+  const headerHtml = isLongText ? `
+    <div class="text-header">
+      <div class="text-title">文本内容</div>
+      <div class="text-meta">
+        ${lineCount} 行 · ${charCount} 字符 · ${wordCount} 词
+      </div>
+    </div>
+  ` : '';
   
   return `
     <div class="content-type-${contentType}">
+      ${headerHtml}
       <div class="${className}">${escapedContent}</div>
     </div>
   `;

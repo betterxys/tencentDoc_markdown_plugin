@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重复内容检测测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .test-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .cell {
+            border: 2px solid #ccc;
+            padding: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f9f9f9;
+        }
+        .cell:hover {
+            border-color: #007bff;
+            background: #e3f2fd;
+        }
+        .cell.clicked {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .cell h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .cell p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .log-container {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .log-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .log-skip {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .log-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .test-instructions {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .test-instructions h2 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .test-instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .test-instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 重复内容检测优化测试</h1>
+    
+    <div class="test-instructions">
+        <h2>测试说明</h2>
+        <ul>
+            <li><strong>快速重复点击同一单元格</strong> (500ms内) → 应该跳过处理</li>
+            <li><strong>短时间内点击相同内容的同一单元格</strong> (2秒内) → 应该跳过处理</li>
+            <li><strong>点击不同单元格但内容相同</strong> → 应该允许处理</li>
+            <li><strong>长时间后重新点击相同内容</strong> (2秒后) → 应该允许处理</li>
+        </ul>
+    </div>
+    
+    <div class="test-container">
+        <div class="cell" data-content="我要如何跟她说清楚这么做的风险？帮我编一段话，语气要严厉一些...">
+            <h3>单元格 A1</h3>
+            <p>包含相同内容</p>
+            <small>点击测试重复内容处理</small>
+        </div>
+        
+        <div class="cell" data-content="我要如何跟她说清楚这么做的风险？帮我编一段话，语气要严厉一些...">
+            <h3>单元格 B1</h3>
+            <p>包含相同内容</p>
+            <small>不同位置，相同内容</small>
+        </div>
+        
+        <div class="cell" data-content="这是不同的内容，用于测试正常的内容处理流程。">
+            <h3>单元格 C1</h3>
+            <p>包含不同内容</p>
+            <small>完全不同的内容</small>
+        </div>
+        
+        <div class="cell" data-content="短内容A">
+            <h3>单元格 A2</h3>
+            <p>短内容测试</p>
+            <small>测试短内容处理</small>
+        </div>
+        
+        <div class="cell" data-content="短内容A">
+            <h3>单元格 B2</h3>
+            <p>相同短内容</p>
+            <small>相同的短内容</small>
+        </div>
+        
+        <div class="cell" data-content="">
+            <h3>单元格 C2</h3>
+            <p>空内容</p>
+            <small>测试空内容处理</small>
+        </div>
+    </div>
+    
+    <div class="log-container" id="log-container">
+        <strong>处理日志:</strong><br>
+        <div id="log-messages"></div>
+    </div>
+    
+    <script>
+        // 模拟重复内容检测逻辑
+        let lastProcessedContent = '';
+        let lastProcessedTimestamp = 0;
+        let lastClickedElement = null;
+        
+        function logMessage(message, type = 'info') {
+            const logContainer = document.getElementById('log-messages');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            
+            // 自动滚动到底部
+            const container = document.getElementById('log-container');
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function processContent(content, targetElement) {
+            if (!content) {
+                logMessage("提取的内容为空，不处理", 'skip');
+                return;
+            }
+            
+            // 改进的重复内容检测逻辑
+            const currentTimestamp = Date.now();
+            const timeSinceLastProcess = currentTimestamp - lastProcessedTimestamp;
+            const clickedElement = targetElement;
+            
+            // 检查是否为快速重复点击同一元素（500ms内）
+            const isSameElementQuickClick = lastClickedElement === clickedElement && timeSinceLastProcess < 500;
+            
+            // 检查是否为相同内容且相同元素的较短时间间隔重复处理
+            const isSameContentSameElement = content === lastProcessedContent && 
+                                           lastClickedElement === clickedElement && 
+                                           timeSinceLastProcess < 2000;
+            
+            if (isSameElementQuickClick) {
+                logMessage(`快速重复点击同一元素(${timeSinceLastProcess}ms)，跳过处理`, 'skip');
+                return;
+            }
+            
+            if (isSameContentSameElement) {
+                logMessage(`相同元素的相同内容且时间间隔较短(${timeSinceLastProcess}ms)，跳过处理`, 'skip');
+                return;
+            }
+            
+            // 如果是不同元素但相同内容，允许处理
+            if (content === lastProcessedContent && lastClickedElement !== clickedElement) {
+                logMessage(`不同元素的相同内容，允许处理`, 'info');
+            }
+            
+            // 更新处理记录
+            lastProcessedContent = content;
+            lastProcessedTimestamp = currentTimestamp;
+            lastClickedElement = clickedElement;
+            
+            // 模拟处理内容
+            logMessage(`✅ 成功处理内容: "${content.substring(0, 30)}${content.length > 30 ? '...' : ''}"`, 'success');
+            
+            // 视觉反馈
+            targetElement.classList.add('clicked');
+            setTimeout(() => {
+                targetElement.classList.remove('clicked');
+            }, 1000);
+        }
+        
+        // 添加点击事件监听器
+        document.addEventListener('click', function(event) {
+            const cell = event.target.closest('.cell');
+            if (cell) {
+                const content = cell.getAttribute('data-content');
+                logMessage(`点击单元格: ${cell.querySelector('h3').textContent}`, 'info');
+                processContent(content, cell);
+            }
+        });
+        
+        // 初始化日志
+        logMessage('重复内容检测测试已初始化', 'info');
+        logMessage('请点击不同的单元格测试各种情况', 'info');
+    </script>
+</body>
+</html>
