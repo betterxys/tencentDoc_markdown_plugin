@@ -1172,25 +1172,73 @@ function processExtractedContent(content, targetElement = null) {
   }
 }
 
+// 消息传递重试机制
+function sendMessageWithRetry(message, retries = 3, retryDelay = 1000) {
+  return new Promise((resolve, reject) => {
+    function attemptSend(remainingRetries) {
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          const lastError = chrome.runtime.lastError;
+          
+          if (lastError) {
+            logMessage(`❌ 消息发送失败: ${lastError.message}`);
+            
+            if (remainingRetries > 0) {
+              logMessage(`🔄 重试发送消息，剩余重试次数: ${remainingRetries - 1}`);
+              setTimeout(() => {
+                attemptSend(remainingRetries - 1);
+              }, retryDelay);
+            } else {
+              const errorMsg = `消息发送失败，已超过重试次数: ${lastError.message}`;
+              logMessage(`❌ ${errorMsg}`);
+              reject(new Error(errorMsg));
+            }
+          } else {
+            logMessage("✅ 消息发送成功");
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (remainingRetries > 0) {
+          logMessage(`🔄 消息发送异常，重试中: ${error.message}`);
+          setTimeout(() => {
+            attemptSend(remainingRetries - 1);
+          }, retryDelay);
+        } else {
+          logMessage(`❌ 消息发送异常，重试失败: ${error.message}`);
+          reject(error);
+        }
+      }
+    }
+    
+    attemptSend(retries);
+  });
+}
+
 // 发送内容到背景脚本
-function sendContentToBackground(content, contentType) {
+async function sendContentToBackground(content, contentType) {
   try {
     logMessage(`🚀 发送内容到背景脚本 (类型: ${contentType}, 长度: ${content.length})`);
     
-    chrome.runtime.sendMessage({
+    const message = {
       type: 'markdown_content',
       content: content,
       contentType: contentType,
       timestamp: Date.now()
-    }, response => {
-      if (response && response.status === 'received') {
-        logMessage("✅ 内容已成功发送到背景脚本");
-      } else {
-        logMessage("❌ 发送内容到背景脚本失败，响应:", response);
-      }
-    });
+    };
+    
+    const response = await sendMessageWithRetry(message, 3, 1000);
+    
+    if (response && response.status === 'received') {
+      logMessage("✅ 内容已成功发送到背景脚本");
+    } else {
+      logMessage("⚠️ 背景脚本响应异常:", response);
+    }
+    
   } catch (error) {
-    ErrorHandler.handle(error, 'sendContentToBackground');
+    logMessage(`❌ 发送内容到背景脚本最终失败: ${error.message}`);
+    // 即使失败也记录错误，但不抛出异常，避免阻塞用户操作
+    ErrorHandler.handle(error, 'sendContentToBackground', false);
   }
 }
 

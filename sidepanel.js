@@ -13,6 +13,201 @@ let currentContent = ''; // 存储当前内容用于复制
 let currentContentType = 'text'; // 存储当前内容类型
 let currentViewMode = 'rendered'; // 'rendered' 或 'source'
 
+// 连接状态监控
+let connectionMonitor = {
+  isConnected: false,
+  lastMessageTime: null,
+  heartbeatInterval: null,
+  reconnectAttempts: 0,
+  maxReconnectAttempts: 5,
+  connectionIndicator: null,
+  
+  // 初始化连接监控
+  init() {
+    this.createConnectionIndicator();
+    this.startHeartbeat();
+  },
+  
+  // 创建连接状态指示器
+  createConnectionIndicator() {
+    this.connectionIndicator = document.createElement('div');
+    this.connectionIndicator.id = 'connection-status';
+    this.connectionIndicator.className = 'connection-status disconnected';
+    this.connectionIndicator.innerHTML = `
+      <div class="connection-icon">●</div>
+      <div class="connection-text">未连接</div>
+    `;
+    
+    // 添加到页面顶部
+    const headerInfo = document.querySelector('.header-info');
+    if (headerInfo) {
+      headerInfo.appendChild(this.connectionIndicator);
+    }
+  },
+  
+  // 更新连接状态显示
+  updateStatus(connected, message = '') {
+    if (!this.connectionIndicator) return;
+    
+    this.isConnected = connected;
+    this.connectionIndicator.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+    
+    const icon = this.connectionIndicator.querySelector('.connection-icon');
+    const text = this.connectionIndicator.querySelector('.connection-text');
+    
+    if (connected) {
+      icon.textContent = '●';
+      text.textContent = message || '已连接';
+      this.reconnectAttempts = 0;
+    } else {
+      icon.textContent = '●';
+      text.textContent = message || '连接断开';
+    }
+    
+    logMessage('connection', `连接状态: ${connected ? '已连接' : '断开'} ${message ? `- ${message}` : ''}`);
+  },
+  
+  // 记录消息活动
+  recordActivity() {
+    this.lastMessageTime = Date.now();
+    if (!this.isConnected) {
+      this.updateStatus(true, '通信正常');
+    }
+  },
+  
+  // 开始心跳检测
+  startHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    
+    this.heartbeatInterval = setInterval(() => {
+      this.checkConnection();
+    }, 5000); // 每5秒检查一次
+  },
+  
+  // 检查连接状态
+  checkConnection() {
+    const now = Date.now();
+    const timeSinceLastMessage = this.lastMessageTime ? now - this.lastMessageTime : Infinity;
+    
+    // 如果超过30秒没有收到消息，认为连接有问题
+    if (timeSinceLastMessage > 30000 && this.isConnected) {
+      this.updateStatus(false, '长时间无响应');
+      this.attemptReconnect();
+    }
+  },
+  
+  // 尝试重新连接
+  attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.updateStatus(false, '重连失败');
+      return;
+    }
+    
+    this.reconnectAttempts++;
+    this.updateStatus(false, `重连中 (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    
+    // 发送测试消息检查连接
+    this.sendTestMessage().then(() => {
+      this.updateStatus(true, '重连成功');
+    }).catch(err => {
+      logMessage('error', `重连失败: ${err.message}`);
+      
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        setTimeout(() => this.attemptReconnect(), 2000);
+      } else {
+        this.updateStatus(false, '重连超限');
+      }
+    });
+  },
+  
+  // 发送测试消息
+  sendTestMessage() {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'debug_test',
+          timestamp: Date.now(),
+          source: 'sidepanel'
+        }, (response) => {
+          const lastError = chrome.runtime.lastError;
+          
+          if (lastError) {
+            reject(new Error(lastError.message));
+          } else if (response) {
+            this.recordActivity();
+            resolve(response);
+          } else {
+            reject(new Error('无响应'));
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  },
+  
+  // 停止监控
+  stop() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    
+    if (this.connectionIndicator) {
+      this.connectionIndicator.remove();
+      this.connectionIndicator = null;
+    }
+  }
+};
+
+// 消息传递重试机制（sidepanel专用）
+function sendMessageWithRetry(message, retries = 3, retryDelay = 1000) {
+  return new Promise((resolve, reject) => {
+    function attemptSend(remainingRetries) {
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          const lastError = chrome.runtime.lastError;
+          
+          if (lastError) {
+            logMessage('error', `侧边栏消息发送失败: ${lastError.message}`);
+            
+            if (remainingRetries > 0) {
+              logMessage('connection', `重试发送消息，剩余重试次数: ${remainingRetries - 1}`);
+              setTimeout(() => {
+                attemptSend(remainingRetries - 1);
+              }, retryDelay);
+            } else {
+              const errorMsg = `消息发送失败，已超过重试次数: ${lastError.message}`;
+              logMessage('error', errorMsg);
+              connectionMonitor.updateStatus(false, '重试失败');
+              reject(new Error(errorMsg));
+            }
+          } else {
+            logMessage('connection', "侧边栏消息发送成功");
+            connectionMonitor.recordActivity();
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (remainingRetries > 0) {
+          logMessage('connection', `消息发送异常，重试中: ${error.message}`);
+          setTimeout(() => {
+            attemptSend(remainingRetries - 1);
+          }, retryDelay);
+        } else {
+          logMessage('error', `消息发送异常，重试失败: ${error.message}`);
+          connectionMonitor.updateStatus(false, '发送异常');
+          reject(error);
+        }
+      }
+    }
+    
+    attemptSend(retries);
+  });
+}
+
 // 初始化DOM元素引用
 function initializeDOMReferences() {
   console.log('🔍 开始初始化DOM元素引用...');
@@ -1022,6 +1217,9 @@ function initializeSidePanel() {
 function setupEventListeners() {
   // 监听来自背景脚本的消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // 记录消息活动（用于连接监控）
+    connectionMonitor.recordActivity();
+    
     if (message.type === 'render_markdown') {
       renderMarkdown(message.content, message.timestamp, message.accessibilityMode, message.contentType);
       sendResponse({ status: 'rendered' });
@@ -1116,11 +1314,15 @@ function setupEventListeners() {
     // Ctrl+` 或 Cmd+` 切换无障碍模式
     if ((event.ctrlKey || event.metaKey) && event.key === '`') {
       event.preventDefault();
-      // 通知背景脚本切换无障碍模式
-      chrome.runtime.sendMessage({ type: 'toggle_accessibility' }, response => {
+      // 通知背景脚本切换无障碍模式（使用重试机制）
+      sendMessageWithRetry({ type: 'toggle_accessibility' }, 3, 1000).then(response => {
         if (response && response.status === 'toggled') {
           setAccessibilityMode(response.enabled);
+          connectionMonitor.recordActivity();
         }
+      }).catch(error => {
+        logMessage('error', `切换无障碍模式失败: ${error.message}`);
+        connectionMonitor.updateStatus(false, '通信错误');
       });
     }
   });
@@ -1448,16 +1650,23 @@ function start() {
     console.log('🛠️ 可用调试函数:', debugFunctions);
     logMessage('sidepanel', `添加了全局调试函数: ${debugFunctions.join(', ')}`);
     
+    // 初始化连接监控
+    console.log('📝 步骤6: 初始化连接监控');
+    connectionMonitor.init();
+    console.log('✅ 连接监控初始化成功');
+    
     // 通知背景脚本侧边栏已初始化
-    console.log('📝 步骤6: 通知背景脚本');
+    console.log('📝 步骤7: 通知背景脚本');
     chrome.runtime.sendMessage({
       type: 'sidePanel_initialized'
     }).then(response => {
       console.log('✅ 背景脚本响应:', response);
       logMessage('sidepanel', '成功通知背景脚本侧边栏已初始化');
+      connectionMonitor.recordActivity();
     }).catch(error => {
       console.warn('⚠️ 背景脚本通信失败:', error.message);
       logMessage('warning', `背景脚本通信失败: ${error.message}`);
+      connectionMonitor.updateStatus(false, '初始化失败');
     });
     
     console.log('🎉 侧边栏启动完成!');
@@ -2341,6 +2550,10 @@ document.addEventListener('DOMContentLoaded', start);
 // 监听页面关闭事件，通知背景脚本侧边栏已关闭
 window.addEventListener('beforeunload', function() {
   try {
+    // 停止连接监控
+    connectionMonitor.stop();
+    
+    // 通知背景脚本侧边栏关闭
     chrome.runtime.sendMessage({ type: 'sidePanel_closed' });
   } catch (error) {
     // 忽略错误，可能在扩展卸载时发生

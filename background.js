@@ -4,26 +4,196 @@ const debug = true;
 // 侧边栏的状态
 let sidePanelInitialized = false;
 
+// 连接健康监控
+let connectionHealthMonitor = {
+  lastSuccessfulMessage: Date.now(),
+  failureCount: 0,
+  maxFailures: 5,
+  healthCheckInterval: null,
+  
+  // 记录成功的消息
+  recordSuccess() {
+    this.lastSuccessfulMessage = Date.now();
+    this.failureCount = 0;
+  },
+  
+  // 记录失败的消息
+  recordFailure() {
+    this.failureCount++;
+    logMessage(`记录消息失败 (${this.failureCount}/${this.maxFailures})`);
+    
+    if (this.failureCount >= this.maxFailures) {
+      logMessage('⚠️ 检测到连续消息失败，可能存在连接问题');
+      this.handleConnectionIssue();
+    }
+  },
+  
+  // 处理连接问题
+  handleConnectionIssue() {
+    logMessage('🔧 尝试恢复连接...');
+    
+    // 重置侧边栏状态
+    sidePanelInitialized = false;
+    
+    // 可以在这里添加更多恢复逻辑
+    // 例如：重新注入内容脚本，重新配置侧边栏等
+  },
+  
+  // 开始健康检查
+  startHealthCheck() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+    
+    this.healthCheckInterval = setInterval(() => {
+      const timeSinceLastSuccess = Date.now() - this.lastSuccessfulMessage;
+      
+      // 如果超过30秒没有成功的消息，记录警告
+      if (timeSinceLastSuccess > 30000 && sidePanelInitialized) {
+        logMessage(`⚠️ 已有${Math.floor(timeSinceLastSuccess/1000)}秒没有成功的消息传递`);
+      }
+      
+      // 如果超过2分钟没有成功的消息，认为连接有问题
+      if (timeSinceLastSuccess > 120000 && sidePanelInitialized) {
+        logMessage('❌ 检测到长时间无消息传递，可能存在连接问题');
+        this.handleConnectionIssue();
+      }
+    }, 10000); // 每10秒检查一次
+  },
+  
+  // 停止健康检查
+  stopHealthCheck() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+  }
+};
+
 // 检查侧边栏是否激活的辅助函数
 function isSidePanelActive() {
   return sidePanelInitialized;
 }
 
-// 安全发送消息到侧边栏的辅助函数
-function safeSendToSidePanel(message) {
+// 增强的消息传递重试机制（runtime消息）
+function sendMessageWithRetry(message, retries = 3, retryDelay = 1000) {
   return new Promise((resolve, reject) => {
-    try {
-      chrome.runtime.sendMessage(message).then(response => {
-        resolve(response);
-      }).catch(err => {
-        logMessage(`侧边栏消息发送失败: ${err.message}`);
-        reject(err);
-      });
-    } catch (err) {
-      logMessage(`侧边栏消息异常: ${err.message}`);
-      reject(err);
+    function attemptSend(remainingRetries) {
+      try {
+        chrome.runtime.sendMessage(message, (response) => {
+          const lastError = chrome.runtime.lastError;
+          
+          if (lastError) {
+            logMessage(`❌ 背景脚本消息发送失败: ${lastError.message}`);
+            
+            if (remainingRetries > 0) {
+              logMessage(`🔄 重试发送消息，剩余重试次数: ${remainingRetries - 1}`);
+              setTimeout(() => {
+                attemptSend(remainingRetries - 1);
+              }, retryDelay);
+            } else {
+              const errorMsg = `消息发送失败，已超过重试次数: ${lastError.message}`;
+              logMessage(`❌ ${errorMsg}`);
+              connectionHealthMonitor.recordFailure();
+              reject(new Error(errorMsg));
+            }
+          } else {
+            logMessage("✅ 背景脚本消息发送成功");
+            connectionHealthMonitor.recordSuccess();
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (remainingRetries > 0) {
+          logMessage(`🔄 消息发送异常，重试中: ${error.message}`);
+          setTimeout(() => {
+            attemptSend(remainingRetries - 1);
+          }, retryDelay);
+        } else {
+          logMessage(`❌ 消息发送异常，重试失败: ${error.message}`);
+          reject(error);
+        }
+      }
     }
+    
+    attemptSend(retries);
   });
+}
+
+// 增强的标签页消息传递重试机制
+function sendTabMessageWithRetry(tabId, message, retries = 3, retryDelay = 1000) {
+  return new Promise((resolve, reject) => {
+    function attemptSend(remainingRetries) {
+      try {
+        chrome.tabs.sendMessage(tabId, message, (response) => {
+          const lastError = chrome.runtime.lastError;
+          
+          if (lastError) {
+            logMessage(`❌ 标签页${tabId}消息发送失败: ${lastError.message}`);
+            
+            // 特殊处理：如果内容脚本未注入，不重试
+            if (lastError.message.includes('Receiving end does not exist') ||
+                lastError.message.includes('Could not establish connection')) {
+              logMessage(`⚠️ 内容脚本可能未注入到标签页${tabId}，跳过重试`);
+              reject(new Error(`内容脚本连接失败: ${lastError.message}`));
+              return;
+            }
+            
+            if (remainingRetries > 0) {
+              logMessage(`🔄 重试发送标签页消息，剩余重试次数: ${remainingRetries - 1}`);
+              setTimeout(() => {
+                attemptSend(remainingRetries - 1);
+              }, retryDelay);
+            } else {
+              const errorMsg = `标签页消息发送失败，已超过重试次数: ${lastError.message}`;
+              logMessage(`❌ ${errorMsg}`);
+              reject(new Error(errorMsg));
+            }
+          } else {
+            logMessage(`✅ 标签页${tabId}消息发送成功`);
+            resolve(response);
+          }
+        });
+      } catch (error) {
+        if (remainingRetries > 0) {
+          logMessage(`🔄 标签页消息发送异常，重试中: ${error.message}`);
+          setTimeout(() => {
+            attemptSend(remainingRetries - 1);
+          }, retryDelay);
+        } else {
+          logMessage(`❌ 标签页消息发送异常，重试失败: ${error.message}`);
+          reject(error);
+        }
+      }
+    }
+    
+    attemptSend(retries);
+  });
+}
+
+// 安全发送消息到侧边栏的辅助函数（增强版）
+async function safeSendToSidePanel(message) {
+  try {
+    // 首先检查侧边栏是否激活
+    if (!isSidePanelActive()) {
+      throw new Error('侧边栏未激活');
+    }
+    
+    // 使用重试机制发送消息
+    const response = await sendMessageWithRetry(message, 3, 1000);
+    return response;
+  } catch (error) {
+    logMessage(`侧边栏消息发送失败: ${error.message}`);
+    
+    // 如果是连接错误，可能侧边栏已关闭
+    if (error.message.includes('Receiving end does not exist') || 
+        error.message.includes('Extension context invalidated')) {
+      logMessage('⚠️ 检测到侧边栏连接断开，重置状态');
+      sidePanelInitialized = false;
+    }
+    
+    throw error;
+  }
 }
 
 // 无障碍模式状态
@@ -294,10 +464,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!wasInitialized) {
       console.log("🎉 侧边栏首次初始化成功！");
       logMessage("✅ 侧边栏首次初始化成功");
+      
+      // 启动连接健康监控
+      connectionHealthMonitor.startHealthCheck();
+      logMessage("🔍 连接健康监控已启动");
     } else {
       console.log("🔄 侧边栏重新初始化");
       logMessage("🔄 侧边栏重新初始化");
     }
+    
+    // 记录成功的初始化
+    connectionHealthMonitor.recordSuccess();
     
     // 检查是否有存储的 Markdown 内容
     chrome.storage.local.get(['lastMarkdownContent', 'timestamp', 'accessibilityMode'], function(data) {
@@ -332,7 +509,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 处理侧边栏关闭通知
   if (message.type === 'sidePanel_closed') {
     sidePanelInitialized = false;
-    logMessage("侧边栏已关闭");
+    
+    // 停止连接健康监控
+    connectionHealthMonitor.stopHealthCheck();
+    logMessage("侧边栏已关闭，连接健康监控已停止");
+    
     sendResponse({ status: 'ack' });
     return true;
   }
@@ -395,12 +576,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (tabs && tabs.length > 0) {
         const tabId = tabs[0].id;
         
-        chrome.tabs.sendMessage(tabId, {
+        // 使用重试机制通知内容脚本
+        sendTabMessageWithRetry(tabId, {
           type: 'stop_listening'
-        }).then(() => {
+        }, 3, 1000).then(() => {
           logMessage('已通知内容脚本停止监听');
         }).catch(err => {
-          logMessage(`通知内容脚本失败: ${err.message}`);
+          logMessage(`通知内容脚本最终失败: ${err.message}`);
         });
       } else {
         logMessage('没有找到活动的标签页');
@@ -427,14 +609,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (tabs && tabs.length > 0) {
         const tabId = tabs[0].id;
         
-        // 通知内容脚本恢复监听
-        chrome.tabs.sendMessage(tabId, {
+        // 使用重试机制通知内容脚本恢复监听
+        sendTabMessageWithRetry(tabId, {
           type: 'start_listening'
-        }).then(() => {
+        }, 3, 1000).then(() => {
           logMessage('已通知内容脚本恢复监听');
           sendResponse({ status: 'started', success: true });
         }).catch(err => {
-          logMessage(`通知内容脚本失败: ${err.message}`);
+          logMessage(`通知内容脚本最终失败: ${err.message}`);
           sendResponse({ status: 'error', message: err.message });
         });
       } else {
