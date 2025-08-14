@@ -101,7 +101,10 @@ function sendMessageWithRetry(message, retries = 3, retryDelay = 1000) {
               reject(new Error(errorMsg));
             }
           } else {
-            logMessage("✅ 背景脚本消息发送成功");
+            // 避免日志循环：不在这里记录日志消息，只在控制台输出
+            if (debug) {
+              console.log("[Background] ✅ 背景脚本消息发送成功");
+            }
             connectionHealthMonitor.recordSuccess();
             resolve(response);
           }
@@ -153,7 +156,10 @@ function sendTabMessageWithRetry(tabId, message, retries = 3, retryDelay = 1000)
               reject(new Error(errorMsg));
             }
           } else {
-            logMessage(`✅ 标签页${tabId}消息发送成功`);
+            // 避免日志循环：不在这里记录日志消息，只在控制台输出
+            if (debug) {
+              console.log(`[Background] ✅ 标签页${tabId}消息发送成功`);
+            }
             resolve(response);
           }
         });
@@ -440,25 +446,13 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
   
   try {
-    // 🔑 新增：确保内容脚本在当前标签页中可用
-    if (isValidDocUrl(tab.url)) {
-      logMessage(`📋 确保标签页 ${tab.id} 内容脚本可用`);
-      const scriptReady = await ContentScriptManager.ensureContentScript(tab.id);
-      
-      if (scriptReady) {
-        logMessage(`✅ 标签页 ${tab.id} 内容脚本确认就绪`);
-      } else {
-        logMessage(`⚠️ 标签页 ${tab.id} 内容脚本未就绪，但继续打开侧边栏`);
-      }
-    }
-    
     console.log('🚀 尝试打开侧边栏...');
     console.log('📋 侧边栏打开参数:', { tabId: tab.id });
     
     const startTime = Date.now();
     
     // 🔑 关键修复：在用户手势同步调用栈中直接打开侧边栏
-    // 不使用异步 Promise 链，确保不丢失用户手势上下文
+    // 必须在任何async操作之前同步调用，确保不丢失用户手势上下文
     chrome.sidePanel.open({ tabId: tab.id }).then(() => {
       const duration = Date.now() - startTime;
       console.log(`✅ 侧边栏打开成功 (耗时: ${duration}ms)`);
@@ -476,6 +470,20 @@ chrome.action.onClicked.addListener(async (tab) => {
         console.warn('⚠️ 侧边栏配置确认失败:', configError.message);
         logMessage(`⚠️ 侧边栏配置确认失败: ${configError.message}`);
       });
+      
+      // 🔑 现在异步确保内容脚本可用（侧边栏已经打开，用户手势不再需要）
+      if (isValidDocUrl(tab.url)) {
+        logMessage(`📋 侧边栏已打开，现在检查标签页 ${tab.id} 内容脚本状态`);
+        ContentScriptManager.ensureContentScript(tab.id).then(scriptReady => {
+          if (scriptReady) {
+            logMessage(`✅ 标签页 ${tab.id} 内容脚本确认就绪`);
+          } else {
+            logMessage(`⚠️ 标签页 ${tab.id} 内容脚本未就绪，用户可能需要刷新页面`);
+          }
+        }).catch(error => {
+          logMessage(`❌ 检查内容脚本状态失败: ${error.message}`);
+        });
+      }
       
       // 等待一段时间后检查侧边栏是否真的初始化了
       setTimeout(() => {

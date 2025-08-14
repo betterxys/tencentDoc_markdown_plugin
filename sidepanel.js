@@ -185,7 +185,10 @@ function sendMessageWithRetry(message, retries = 3, retryDelay = 1000) {
               reject(new Error(errorMsg));
             }
           } else {
-            logMessage('connection', "侧边栏消息发送成功");
+            // 避免日志循环：不在这里记录日志消息，只在控制台输出
+            if (debug) {
+              console.log('[SidePanel] ✅ 侧边栏消息发送成功');
+            }
             connectionMonitor.recordActivity();
             resolve(response);
           }
