@@ -4,6 +4,9 @@ const debug = true;
 // 侧边栏的状态
 let sidePanelInitialized = false;
 
+// 内容脚本状态管理
+let contentScriptStates = new Map(); // tabId -> { isInjected, lastActiveTime, retryCount }
+
 // 连接健康监控
 let connectionHealthMonitor = {
   lastSuccessfulMessage: Date.now(),
@@ -199,6 +202,139 @@ async function safeSendToSidePanel(message) {
 // 无障碍模式状态
 let accessibilityMode = false;
 
+// 内容脚本管理工具
+const ContentScriptManager = {
+  // 检查内容脚本是否在指定标签页中活跃
+  async checkContentScriptStatus(tabId) {
+    try {
+      logMessage(`检查标签页 ${tabId} 的内容脚本状态`);
+      
+      // 发送测试消息到内容脚本
+      const response = await sendTabMessageWithRetry(tabId, {
+        type: 'health_check',
+        timestamp: Date.now()
+      }, 1, 500); // 只尝试1次，快速失败
+      
+      if (response) {
+        logMessage(`标签页 ${tabId} 内容脚本响应正常`);
+        this.updateContentScriptState(tabId, true);
+        return true;
+      }
+    } catch (error) {
+      logMessage(`标签页 ${tabId} 内容脚本无响应: ${error.message}`);
+      this.updateContentScriptState(tabId, false);
+      return false;
+    }
+    
+    return false;
+  },
+  
+  // 动态注入内容脚本
+  async injectContentScript(tabId) {
+    try {
+      logMessage(`开始向标签页 ${tabId} 注入内容脚本`);
+      
+      // 检查标签页是否有效
+      const tab = await chrome.tabs.get(tabId);
+      if (!isValidDocUrl(tab.url)) {
+        logMessage(`标签页 ${tabId} URL不符合要求: ${tab.url}`);
+        return false;
+      }
+      
+      // 注入内容脚本
+      await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        files: ['content.js']
+      });
+      
+      // 注入样式
+      await chrome.scripting.insertCSS({
+        target: { tabId: tabId },
+        files: ['styles.css']
+      });
+      
+      logMessage(`✅ 成功向标签页 ${tabId} 注入内容脚本`);
+      
+      // 等待脚本初始化
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 验证注入是否成功
+      const isWorking = await this.checkContentScriptStatus(tabId);
+      if (isWorking) {
+        this.updateContentScriptState(tabId, true);
+        logMessage(`✅ 标签页 ${tabId} 内容脚本注入并验证成功`);
+        return true;
+      } else {
+        logMessage(`❌ 标签页 ${tabId} 内容脚本注入后验证失败`);
+        return false;
+      }
+      
+    } catch (error) {
+      logMessage(`❌ 向标签页 ${tabId} 注入内容脚本失败: ${error.message}`);
+      this.updateContentScriptState(tabId, false);
+      return false;
+    }
+  },
+  
+  // 确保内容脚本在指定标签页中可用
+  async ensureContentScript(tabId) {
+    const state = contentScriptStates.get(tabId);
+    
+    // 如果状态显示已注入且最近有活动，直接返回
+    if (state && state.isInjected && (Date.now() - state.lastActiveTime) < 30000) {
+      logMessage(`标签页 ${tabId} 内容脚本状态良好，无需重新注入`);
+      return true;
+    }
+    
+    // 检查内容脚本状态
+    const isActive = await this.checkContentScriptStatus(tabId);
+    if (isActive) {
+      return true;
+    }
+    
+    // 如果内容脚本不活跃，尝试注入
+    logMessage(`标签页 ${tabId} 内容脚本不活跃，尝试重新注入`);
+    return await this.injectContentScript(tabId);
+  },
+  
+  // 更新内容脚本状态
+  updateContentScriptState(tabId, isInjected) {
+    const now = Date.now();
+    const currentState = contentScriptStates.get(tabId) || { retryCount: 0 };
+    
+    contentScriptStates.set(tabId, {
+      isInjected,
+      lastActiveTime: isInjected ? now : (currentState.lastActiveTime || 0),
+      retryCount: isInjected ? 0 : (currentState.retryCount + 1)
+    });
+    
+    logMessage(`标签页 ${tabId} 状态更新: 注入=${isInjected}, 重试次数=${contentScriptStates.get(tabId).retryCount}`);
+  },
+  
+  // 清理标签页状态
+  cleanupTabState(tabId) {
+    if (contentScriptStates.has(tabId)) {
+      contentScriptStates.delete(tabId);
+      logMessage(`清理标签页 ${tabId} 的内容脚本状态`);
+    }
+  },
+  
+  // 获取所有活跃标签页的状态摘要
+  getStatusSummary() {
+    const summary = [];
+    contentScriptStates.forEach((state, tabId) => {
+      summary.push({
+        tabId,
+        isInjected: state.isInjected,
+        lastActiveTime: state.lastActiveTime,
+        retryCount: state.retryCount,
+        timeSinceLastActive: Date.now() - state.lastActiveTime
+      });
+    });
+    return summary;
+  }
+};
+
 // 日志函数
 function logMessage(message) {
   if (debug) {
@@ -257,7 +393,7 @@ function handleSidePanelError(error, tab, startTime) {
 }
 
 // 当扩展图标被点击时显示侧边栏
-chrome.action.onClicked.addListener((tab) => {
+chrome.action.onClicked.addListener(async (tab) => {
   console.log('=== 扩展图标点击事件 ===');
   console.log('⏰ 点击时间:', new Date().toLocaleString());
   console.log('🏷️ 标签页信息:', {
@@ -304,6 +440,18 @@ chrome.action.onClicked.addListener((tab) => {
   }
   
   try {
+    // 🔑 新增：确保内容脚本在当前标签页中可用
+    if (isValidDocUrl(tab.url)) {
+      logMessage(`📋 确保标签页 ${tab.id} 内容脚本可用`);
+      const scriptReady = await ContentScriptManager.ensureContentScript(tab.id);
+      
+      if (scriptReady) {
+        logMessage(`✅ 标签页 ${tab.id} 内容脚本确认就绪`);
+      } else {
+        logMessage(`⚠️ 标签页 ${tab.id} 内容脚本未就绪，但继续打开侧边栏`);
+      }
+    }
+    
     console.log('🚀 尝试打开侧边栏...');
     console.log('📋 侧边栏打开参数:', { tabId: tab.id });
     
@@ -405,12 +553,14 @@ function shouldMonitorTab(url) {
   return !internalSchemes.some(scheme => url.startsWith(scheme));
 }
 
-// 监听标签页切换事件，当用户切换到其他标签页时关闭侧边栏
-chrome.tabs.onActivated.addListener((activeInfo) => {
+// 监听标签页切换事件，确保内容脚本可用
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
   logMessage(`标签页切换: ${activeInfo.tabId}`);
   
-  // 检查当前活动的标签页是否是腾讯文档 sheet 模式页面
-  chrome.tabs.get(activeInfo.tabId, (tab) => {
+  try {
+    // 检查当前活动的标签页是否是腾讯文档 sheet 模式页面
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    
     // 只监听应该被监听的标签页，避免扩展自身页面触发逻辑
     if (!shouldMonitorTab(tab.url)) {
       logMessage(`跳过监听标签页: ${tab.url} (扩展内部页面)`);
@@ -421,8 +571,6 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     
     if (!isValidTab) {
       // 如果不是腾讯文档 sheet 模式页面，设置侧边栏不可用
-      // 注意：chrome.sidePanel.close() 在 Manifest V3 中不存在
-      // 替代方案：设置侧边栏为禁用状态
       try {
         chrome.sidePanel.setOptions({
           tabId: activeInfo.tabId,
@@ -430,9 +578,11 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
         });
         logMessage("标签页不是腾讯文档 sheet 模式，禁用侧边栏");
       } catch (err) {
-        // 忽略错误，某些Chrome版本可能不支持此API或侧边栏未激活
         logMessage(`设置侧边栏状态错误: ${err.message}`);
       }
+      
+      // 清理内容脚本状态
+      ContentScriptManager.cleanupTabState(activeInfo.tabId);
     } else {
       // 如果是有效页面，确保侧边栏可用
       try {
@@ -445,8 +595,20 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
       } catch (err) {
         logMessage(`启用侧边栏错误: ${err.message}`);
       }
+      
+      // 🔑 关键改进：确保内容脚本在切换回来时可用
+      logMessage(`🔄 标签页切换后检查内容脚本状态: ${activeInfo.tabId}`);
+      const scriptReady = await ContentScriptManager.ensureContentScript(activeInfo.tabId);
+      
+      if (scriptReady) {
+        logMessage(`✅ 标签页 ${activeInfo.tabId} 内容脚本就绪`);
+      } else {
+        logMessage(`❌ 标签页 ${activeInfo.tabId} 内容脚本无法就绪`);
+      }
     }
-  });
+  } catch (error) {
+    logMessage(`标签页切换处理失败: ${error.message}`);
+  }
 });
 
 // 当侧边栏脚本加载时发出初始化消息
@@ -522,12 +684,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'debug_test') {
     console.log('收到调试测试消息:', message);
     logMessage(`收到调试测试消息: ${JSON.stringify(message)}`);
+    
+    // 添加内容脚本状态信息
+    const contentScriptStatus = ContentScriptManager.getStatusSummary();
+    
     sendResponse({ 
       status: 'success', 
       timestamp: Date.now(),
       sidePanelAPI: !!chrome.sidePanel,
       sidePanelInitialized: sidePanelInitialized,
-      extensionId: chrome.runtime.id
+      extensionId: chrome.runtime.id,
+      contentScriptStatus: contentScriptStatus
     });
     return true;
   }
@@ -671,8 +838,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-// 监听标签页的导航事件，当用户导航到非腾讯文档页面时关闭侧边栏
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+// 监听标签页的导航事件，确保页面重新加载后内容脚本可用
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   // 只在页面完成加载并且URL可用时检查
   if (changeInfo.status === 'complete' && tab.url) {
     // 只监听应该被监听的标签页，避免扩展自身页面触发逻辑
@@ -692,9 +859,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         });
         logMessage(`标签页 ${tabId} 导航到非腾讯文档 sheet 模式页面，禁用侧边栏`);
       } catch (err) {
-        // 忽略错误，某些Chrome版本可能不支持此API或侧边栏未激活
         logMessage(`设置侧边栏状态错误: ${err.message}`);
       }
+      
+      // 清理内容脚本状态
+      ContentScriptManager.cleanupTabState(tabId);
     } else {
       // 如果是有效页面，确保侧边栏可用并配置正确
       try {
@@ -707,6 +876,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       } catch (err) {
         logMessage(`启用侧边栏错误: ${err.message}`);
       }
+      
+      // 🔑 关键改进：页面重新加载后确保内容脚本可用
+      logMessage(`📄 页面加载完成，检查内容脚本状态: ${tabId}`);
+      
+      // 页面重新加载会清除所有注入的脚本，所以清理状态并重新注入
+      ContentScriptManager.cleanupTabState(tabId);
+      
+      // 等待一段时间让页面完全稳定
+      setTimeout(async () => {
+        const scriptReady = await ContentScriptManager.ensureContentScript(tabId);
+        
+        if (scriptReady) {
+          logMessage(`✅ 标签页 ${tabId} 页面加载后内容脚本就绪`);
+        } else {
+          logMessage(`❌ 标签页 ${tabId} 页面加载后内容脚本无法就绪`);
+        }
+      }, 2000); // 等待2秒确保页面完全加载
     }
   }
 });

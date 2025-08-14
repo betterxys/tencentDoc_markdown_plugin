@@ -1593,6 +1593,60 @@ function checkSidePanelStatus() {
   return status;
 }
 
+// 检查内容脚本状态的专用函数
+async function checkContentScriptStatus() {
+  console.log('🔍 ===== 内容脚本状态检查 =====');
+  
+  try {
+    // 发送调试消息到背景脚本获取内容脚本状态
+    const response = await sendMessageWithRetry({
+      type: 'debug_test',
+      timestamp: Date.now(),
+      source: 'sidepanel-content-script-check'
+    }, 3, 1000);
+    
+    if (response && response.contentScriptStatus) {
+      console.log('📊 内容脚本状态摘要:', response.contentScriptStatus);
+      
+      // 在日志中显示详细信息
+      logMessage('diagnostic', `发现 ${response.contentScriptStatus.length} 个标签页的内容脚本状态`);
+      
+      response.contentScriptStatus.forEach(status => {
+        const timeSinceActive = Math.floor(status.timeSinceLastActive / 1000);
+        const statusIcon = status.isInjected ? '✅' : '❌';
+        const timeText = timeSinceActive < 60 ? `${timeSinceActive}秒前` : `${Math.floor(timeSinceActive/60)}分钟前`;
+        
+        logMessage('diagnostic', 
+          `${statusIcon} 标签页${status.tabId}: ` +
+          `注入=${status.isInjected}, ` +
+          `最后活动=${timeText}, ` +
+          `重试=${status.retryCount}次`
+        );
+      });
+      
+      // 检查当前标签页状态
+      const activeTabStatus = response.contentScriptStatus.find(s => s.timeSinceLastActive < 60000);
+      
+      if (activeTabStatus && activeTabStatus.isInjected) {
+        logMessage('diagnostic', '✅ 当前活跃标签页内容脚本状态正常');
+      } else {
+        logMessage('diagnostic', '⚠️ 当前可能没有活跃的内容脚本');
+      }
+      
+      return response.contentScriptStatus;
+    } else {
+      console.warn('⚠️ 无法获取内容脚本状态信息');
+      logMessage('diagnostic', '❌ 无法获取内容脚本状态信息');
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('❌ 检查内容脚本状态失败:', error);
+    logMessage('error', `检查内容脚本状态失败: ${error.message}`);
+    return null;
+  }
+}
+
 // 启动侧边栏
 function start() {
   console.log('🚀 开始启动侧边栏...');
@@ -1639,13 +1693,15 @@ function start() {
     window.testContentPreprocessing = testTableCleaning;
     window.debugCurrentContent = debugCurrentContent;
     window.checkSidePanelStatus = checkSidePanelStatus; // 新增状态检查函数
+    window.checkContentScriptStatus = checkContentScriptStatus; // 新增内容脚本状态检查
     
     const debugFunctions = [
       'testTableRendering()', 
       'testContentTableDetection()', 
       'testContentPreprocessing()', 
       'debugCurrentContent()',
-      'checkSidePanelStatus()'
+      'checkSidePanelStatus()',
+      'checkContentScriptStatus()'
     ];
     console.log('🛠️ 可用调试函数:', debugFunctions);
     logMessage('sidepanel', `添加了全局调试函数: ${debugFunctions.join(', ')}`);

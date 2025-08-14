@@ -502,6 +502,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
   
+  if (message.type === 'health_check') {
+    // 健康检查：验证内容脚本是否正常运行
+    logMessage('收到健康检查请求');
+    sendResponse({ 
+      status: 'healthy',
+      timestamp: Date.now(),
+      isListening: isListening,
+      url: window.location.href,
+      pageTitle: document.title.substring(0, 50)
+    });
+    return true;
+  }
+  
   return false;
 });
 
